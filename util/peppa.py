@@ -54,10 +54,11 @@ class Peppa():
 
 
 class PreProcessor(Dataset):
-    def __init__(self, dataset, transform=None):
+    def __init__(self, dataset, transform=None, eval_transform=None):
         super(PreProcessor, self).__init__()
         self.dataset = dataset
         self.transform = transform
+        self.eval_transform = eval_transform
         self.loader = self.default_loader
 
     def default_loader(self, path):
@@ -66,9 +67,15 @@ class PreProcessor(Dataset):
     def __getitem__(self, index):
         path, mask_path, target = self.dataset[index]
         sample = self.loader(path)
+        sample_masked = self.loader(mask_path)
+
         if self.transform is not None:
-            sample = self.transform(sample)
-        return sample, target
+            sample_masked = self.transform(sample_masked)
+
+        if self.eval_transform is not None:
+            sample = self.eval_transform(sample)
+
+        return sample_masked, sample
 
     def __len__(self):
         return len(self.dataset)
@@ -81,7 +88,7 @@ def build_peppa_dataset(args, transform=None):
 
     dataset = Peppa(args.data_path)
 
-    train_dataset = PreProcessor(dataset.train_samples, transform=transform)
+    train_dataset = PreProcessor(dataset.train_samples, transform=transform, eval_transform=val_transform)
     val_dataset = PreProcessor(dataset.val_samples, transform=val_transform)
     test_dataset = PreProcessor(dataset.test_samples, transform=val_transform)
 
