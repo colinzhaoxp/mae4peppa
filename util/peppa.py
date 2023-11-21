@@ -83,7 +83,7 @@ class PreProcessor(Dataset):
 
 def build_peppa_dataset(args, transform=None):
     if transform is None:
-        transform = build_transform(True, args)
+        transform = build_transform(False, args)
     val_transform = build_transform(False, args)
 
     dataset = Peppa(args.data_path)
