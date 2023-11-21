@@ -58,6 +58,10 @@ class MaskedAutoencoderViT(nn.Module):
         self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size**2 * in_chans, bias=True) # decoder to patch
         # --------------------------------------------------------------------------
 
+        # --------------------------------------------------------------------------
+        # self.head = nn.Linear(decoder_embed_dim, 1, bias=False)
+        # --------------------------------------------------------------------------
+
         self.norm_pix_loss = norm_pix_loss
 
         self.initialize_weights()
@@ -147,15 +151,12 @@ class MaskedAutoencoderViT(nn.Module):
 
         return x_masked, mask, ids_restore
 
-    def forward_encoder(self, x, mask_ratio):
+    def forward_encoder(self, x):
         # embed patches
         x = self.patch_embed(x)
 
         # add pos embed w/o cls token
         x = x + self.pos_embed[:, 1:, :]
-
-        # masking: length -> length * mask_ratio
-        x, mask, ids_restore = self.random_masking(x, mask_ratio)
 
         # append cls token
         cls_token = self.cls_token + self.pos_embed[:, :1, :]
@@ -167,17 +168,11 @@ class MaskedAutoencoderViT(nn.Module):
             x = blk(x)
         x = self.norm(x)
 
-        return x, mask, ids_restore
+        return x
 
-    def forward_decoder(self, x, ids_restore):
+    def forward_decoder(self, x):
         # embed tokens
         x = self.decoder_embed(x)
-
-        # append mask tokens to sequence
-        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
-        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
-        x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
-        x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
 
         # add pos embed
         x = x + self.decoder_pos_embed
@@ -187,15 +182,20 @@ class MaskedAutoencoderViT(nn.Module):
             x = blk(x)
         x = self.decoder_norm(x)
 
+        # predict weight
+        # cls = x[:, 0, :]
+        # pre = self.head(cls)
+
         # predictor projection
         x = self.decoder_pred(x)
 
         # remove cls token
         x = x[:, 1:, :]
 
+        # return x, pre
         return x
 
-    def forward_loss(self, imgs, pred, mask):
+    def forward_loss(self, imgs, pred):
         """
         imgs: [N, 3, H, W]
         pred: [N, L, p*p*3]
@@ -209,15 +209,17 @@ class MaskedAutoencoderViT(nn.Module):
 
         loss = (pred - target) ** 2
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
-
-        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        N, L = loss.shape
+        loss = loss.sum() / N   # mean loss on all patches
         return loss
 
-    def forward(self, imgs, mask_ratio=0.75):
-        latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
-        pred = self.forward_decoder(latent, ids_restore)  # [N, L, p*p*3]
-        loss = self.forward_loss(imgs, pred, mask)
-        return loss, pred, mask
+    def forward(self, imgs_masked, imgs=None, mask_ratio=0.75):
+        latent = self.forward_encoder(imgs_masked)
+        pred = self.forward_decoder(latent)  # [N, L, p*p*3]
+        if imgs is None:
+            return pred
+        loss = self.forward_loss(imgs, pred)
+        return loss, pred
 
 
 def mae_vit_base_patch16_dec512d8b(**kwargs):
