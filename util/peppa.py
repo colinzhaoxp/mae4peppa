@@ -75,7 +75,7 @@ class PreProcessor(Dataset):
         if self.eval_transform is not None:
             sample = self.eval_transform(sample)
 
-        return sample_masked, sample
+        return sample_masked, sample, target
 
     def __len__(self):
         return len(self.dataset)

@@ -59,7 +59,12 @@ class MaskedAutoencoderViT(nn.Module):
         # --------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------
-        # self.head = nn.Linear(decoder_embed_dim, 1, bias=False)
+        self.feat_bn = nn.BatchNorm1d(decoder_embed_dim)
+        self.weight_pred = nn.Sequential(
+            nn.Linear(decoder_embed_dim, 128, bias=True),
+            nn.ReLU(),
+            nn.Linear(128, 1, bias=False)
+        )
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss
@@ -183,8 +188,8 @@ class MaskedAutoencoderViT(nn.Module):
         x = self.decoder_norm(x)
 
         # predict weight
-        # cls = x[:, 0, :]
-        # pre = self.head(cls)
+        cls = self.feat_bn(x[:, 0, :]) # batch * 512
+        pre = self.weight_pred(cls)
 
         # predictor projection
         x = self.decoder_pred(x)
@@ -192,8 +197,7 @@ class MaskedAutoencoderViT(nn.Module):
         # remove cls token
         x = x[:, 1:, :]
 
-        # return x, pre
-        return x
+        return x, pre
 
     def forward_loss(self, imgs, pred):
         """
@@ -215,11 +219,11 @@ class MaskedAutoencoderViT(nn.Module):
 
     def forward(self, imgs_masked, imgs=None, mask_ratio=0.75):
         latent = self.forward_encoder(imgs_masked)
-        pred = self.forward_decoder(latent)  # [N, L, p*p*3]
+        pred, weight_pred = self.forward_decoder(latent)  # [N, L, p*p*3]
         if imgs is None:
-            return pred
+            return pred, weight_pred
         loss = self.forward_loss(imgs, pred)
-        return loss, pred
+        return loss, weight_pred
 
 
 def mae_vit_base_patch16_dec512d8b(**kwargs):

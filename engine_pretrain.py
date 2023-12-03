@@ -36,7 +36,8 @@ def train_one_epoch(model: torch.nn.Module,
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
-    for data_iter_step, (samples_masked, samples) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, (samples_masked, samples, target) in enumerate(
+            metric_logger.log_every(data_loader, print_freq, header)):
 
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
@@ -44,9 +45,14 @@ def train_one_epoch(model: torch.nn.Module,
 
         samples_masked = samples_masked.to(device, non_blocking=True)
         samples = samples.to(device, non_blocking=True)
+        target = target.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            loss, pred = model(samples_masked, samples)
+            loss, weight_pred = model(samples_masked, samples)
+            weight_loss = log_rmse(weight_pred, target)
+            loss = loss + weight_loss
+
+            abs_acc, rel_acc = acc_metric(weight_pred, target)
 
         loss_value = loss.item()
 
@@ -62,7 +68,8 @@ def train_one_epoch(model: torch.nn.Module,
 
         torch.cuda.synchronize()
 
-        metric_logger.update(loss=loss_value)
+        metric_logger.update(loss=loss_value, weight_loss=weight_loss.item(),
+                             absulate_acc=abs_acc.item(), relative_acc=rel_acc.item())
 
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
@@ -74,10 +81,24 @@ def train_one_epoch(model: torch.nn.Module,
             """
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
+            log_writer.add_scalar('train_weight_loss', weight_loss.item(), epoch_1000x)
+            log_writer.add_scalar('train_absolute_acc', abs_acc, epoch_1000x)
+            log_writer.add_scalar('train_relative_acc', rel_acc, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
-
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
+
+def log_rmse(preds, lables):
+    clipped_preds = torch.clamp(preds, 1, float('inf'))
+    rmse = torch.mean((torch.log(clipped_preds) - torch.log(lables)) ** 2)
+    return rmse
+
+
+def acc_metric(preds, lables):
+    abs_acc = torch.mean(torch.abs(preds - lables))
+    rel_acc = 1 - torch.mean(torch.abs(preds - lables) / lables)
+    return abs_acc, rel_acc
