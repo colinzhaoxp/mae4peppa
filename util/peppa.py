@@ -74,6 +74,8 @@ class PreProcessor(Dataset):
 
         if self.eval_transform is not None:
             sample = self.eval_transform(sample)
+        else:
+            return sample_masked, target
 
         return sample_masked, sample, target
 

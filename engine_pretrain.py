@@ -102,3 +102,24 @@ def acc_metric(preds, lables):
     abs_acc = torch.mean(torch.abs(preds - lables))
     rel_acc = 1 - torch.mean(torch.abs(preds - lables) / lables)
     return abs_acc, rel_acc
+
+
+def evaluate(model, dataloader, device, args):
+    model.eval()
+    abs_accs = []
+    rel_accs = []
+    with torch.no_grad():
+        for data_iter_step, (samples_masked, target) in enumerate(dataloader):
+            samples_masked = samples_masked.to(device, non_blocking=True)
+            # samples = samples.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+
+            loss, weight_pred = model(samples_masked)
+            abs_acc, rel_acc = acc_metric(weight_pred, target)
+            abs_accs.append(abs_acc.item())
+            rel_accs.append(rel_acc.item())
+
+    abs_acc = sum(abs_accs) / len(abs_accs)
+    rel_acc = sum(rel_accs) / len(rel_accs)
+
+    return abs_acc, rel_acc

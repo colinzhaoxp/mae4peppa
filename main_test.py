@@ -38,6 +38,7 @@ from util.peppa import build_peppa_dataset
 from util.iotools import save_train_configs
 from util.logging import Logger
 
+
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
     parser.add_argument('--batch_size', default=64, type=int,
@@ -111,7 +112,7 @@ def get_args_parser():
 def main(args):
     misc.init_distributed_mode(args)
 
-    sys.stdout = Logger(os.path.join(args.output_dir, 'log.txt'))
+    sys.stdout = Logger(os.path.join(args.output_dir, 'log-test.txt'))
     print("==========\nArgs:{}\n==========".format(args))
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
@@ -126,55 +127,17 @@ def main(args):
 
     cudnn.benchmark = True
 
-    # simple augmentation
-    transform_train = transforms.Compose([
-            transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-
-    dataset_train, dataset_val, dataset_test = build_peppa_dataset(args, transform_train)
+    dataset_train, dataset_val, dataset_test = build_peppa_dataset(args)
 
     print(dataset_train)
 
-    if args.distributed:
-        num_tasks = misc.get_world_size()
-        global_rank = misc.get_rank()
-        sampler_train = torch.utils.data.DistributedSampler(
-            dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
-        )
-        print("Sampler_train = %s" % str(sampler_train))
-    else:
-        global_rank = 0
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-
-    if global_rank == 0 and args.log_dir is not None:
-        os.makedirs(args.output_dir, exist_ok=True)
-        log_writer = SummaryWriter(log_dir=args.output_dir)
-    else:
-        log_writer = None
-
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=True,
-    )
-
-    data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=False,
-    )
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test, batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
         drop_last=False,
     )
-    
+
     # define the model
     model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
 
@@ -196,68 +159,7 @@ def main(args):
 
     model.to(device)
 
-    model_without_ddp = model
-    # print("Model = %s" % str(model_without_ddp))
-
-    eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
-    
-    if args.lr is None:  # only base_lr is specified
-        args.lr = args.blr * eff_batch_size / 256
-
-    print("base lr: %.2e" % (args.lr * 256 / eff_batch_size))
-    print("actual lr: %.2e" % args.lr)
-
-    print("accumulate grad iterations: %d" % args.accum_iter)
-    print("effective batch size: %d" % eff_batch_size)
-
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
-        model_without_ddp = model.module
-    
-    # following timm: set wd as 0 for bias and norm layers
-    param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
-    optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
-    print(optimizer)
-    loss_scaler = NativeScaler()
-
-    misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
-
-    criterion = torch.nn.MSELoss()
-
-    print(f"Start training for {args.epochs} epochs")
     start_time = time.perf_counter()
-    val_best_acc = 0.0
-    val_best_epoch = 0
-    for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            data_loader_train.sampler.set_epoch(epoch)
-        train_stats = train_one_epoch(
-            model, data_loader_train,
-            optimizer, device, epoch, loss_scaler,
-            log_writer=log_writer,
-            args=args
-        )
-        print(f"Epoch {epoch+1} finished: start evaluating on validation dataset:")
-        val_abs_acc, val_rel_acc = evaluate(model, data_loader_val, device, args)
-        print(f'Evaluate: abs_acc = {val_abs_acc:.4f}, rel_acc = {val_rel_acc:.4f}')
-
-        if args.output_dir:
-            if val_abs_acc <= val_abs_acc:
-                val_best_acc = val_abs_acc
-                val_best_epoch = epoch + 1
-                misc.save_model(
-                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, epoch=epoch, is_best=True)
-
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                        'epoch': epoch, 'val_abs_acc': val_abs_acc, 'val_rel_acc': val_rel_acc,
-                        'val_best_epoch': val_best_epoch, 'val_best_acc': val_best_acc}
-
-        if args.output_dir and misc.is_main_process():
-            if log_writer is not None:
-                log_writer.flush()
-            print(log_stats)
-
     print("start evaluating on test dataset")
     abs_acc, rel_acc = evaluate(model, data_loader_test, device, args)
     print("Evaluate: abs_acc = %.4f, rel_acc = %.4f" % (abs_acc, rel_acc))
