@@ -110,6 +110,24 @@ def get_args_parser():
     return parser
 
 
+
+def load_checkpoint(model, finetune_path):
+    checkpoint = torch.load(finetune_path, map_location='cpu')
+
+    print("Load pre-trained checkpoint from: %s" % finetune_path)
+    checkpoint_model = checkpoint['model']
+    state_dict = model.state_dict()
+    for k in ['head.weight', 'head.bias']:
+        if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+            print(f"Removing key {k} from pretrained checkpoint")
+            del checkpoint_model[k]
+
+    # load pre-trained model
+    msg = model.load_state_dict(checkpoint_model, strict=False)
+    print(msg)
+
+    return model
+
 def main(args):
     misc.init_distributed_mode(args)
 
@@ -193,19 +211,7 @@ def main(args):
 
     # load pre-trained model
     if args.finetune:
-        checkpoint = torch.load(args.finetune, map_location='cpu')
-
-        print("Load pre-trained checkpoint from: %s" % args.finetune)
-        checkpoint_model = checkpoint['model']
-        state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
-        # load pre-trained model
-        msg = model.load_state_dict(checkpoint_model, strict=False)
-        print(msg)
+        model = load_checkpoint(model, args.finetune)
 
     model.to(device)
 
@@ -239,8 +245,10 @@ def main(args):
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.perf_counter()
-    val_best_acc = 0.0
-    val_best_epoch = 0
+    val_best_mae_acc = 0.0
+    val_best_mae_epoch = 0
+    val_best_mape_acc = 0.0
+    val_best_mape_epoch = 0
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -251,20 +259,28 @@ def main(args):
             args=args
         )
         print(f"Epoch {epoch+1} finished: start evaluating on validation dataset:")
-        val_abs_acc, val_rel_acc = evaluate(model, data_loader_val, device, args)
-        print(f'Evaluate: abs_acc = {val_abs_acc:.4f}, rel_acc = {val_rel_acc:.4f}')
+        val_mae_acc, val_mape_acc = evaluate(model, data_loader_val, device, args)
+
+        print(f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}')
 
         if args.output_dir:
-            if val_abs_acc <= val_abs_acc:
-                val_best_acc = val_abs_acc
-                val_best_epoch = epoch + 1
+            if val_mae_acc > val_best_mae_acc:
+                val_best_mae_acc = val_mae_acc
+                val_best_mae_epoch = epoch + 1
                 misc.save_model(
                     args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, epoch=epoch, is_best=True)
+                    loss_scaler=loss_scaler, epoch=epoch, suffixes='best_MAE_ACC')
+            if val_mape_acc > val_best_mape_acc:
+                val_best_mape_acc = val_mape_acc
+                val_best_mape_epoch = epoch + 1
+                misc.save_model(
+                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                    loss_scaler=loss_scaler, epoch=epoch, suffixes='best_MAPE_ACC')
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                        'epoch': epoch, 'val_abs_acc': val_abs_acc, 'val_rel_acc': val_rel_acc,
-                        'val_best_epoch': val_best_epoch, 'val_best_acc': val_best_acc}
+                        'epoch': epoch, 'val_mae_acc': val_mae_acc, 'val_mape_acc': val_mape_acc,
+                        'val_best_mae_epoch': val_best_mae_epoch, 'val_best_mae_acc': val_best_mae_acc,
+                        'val_best_mape_epoch': val_best_mape_epoch, 'val_best_mape_acc': val_best_mape_acc}
 
         if args.output_dir and misc.is_main_process():
             if log_writer is not None:
@@ -272,8 +288,14 @@ def main(args):
             print(log_stats)
 
     print("start evaluating on test dataset")
-    abs_acc, rel_acc = evaluate(model, data_loader_test, device, args)
-    print("Evaluate: abs_acc = %.4f, rel_acc = %.4f" % (abs_acc, rel_acc))
+
+    model = load_checkpoint(model, args.output_dir + '/checkpoint-best_MAPE_ACC.pth')
+    mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)
+    print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (mae_acc, mape_acc))
+
+    model = load_checkpoint(model, args.output_dir + '/checkpoint-best_MAE_ACC.pth')
+    mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)
+    print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (mae_acc, mape_acc))
 
     total_time = time.perf_counter() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

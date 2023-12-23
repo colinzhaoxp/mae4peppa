@@ -52,7 +52,7 @@ def train_one_epoch(model: torch.nn.Module,
             weight_loss = log_rmse(weight_pred, target)
             loss = loss + weight_loss
 
-            abs_acc, rel_acc = acc_metric(weight_pred, target)
+            mae_acc, mape_acc = acc_metric(weight_pred, target)
 
         loss_value = loss.item()
 
@@ -69,7 +69,7 @@ def train_one_epoch(model: torch.nn.Module,
         torch.cuda.synchronize()
 
         metric_logger.update(loss=loss_value, weight_loss=weight_loss.item(),
-                             absulate_acc=abs_acc.item(), relative_acc=rel_acc.item())
+                             mae_acc=mae_acc.item(), mape_acc=mape_acc.item())
 
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
@@ -82,8 +82,8 @@ def train_one_epoch(model: torch.nn.Module,
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('train_weight_loss', weight_loss.item(), epoch_1000x)
-            log_writer.add_scalar('train_absolute_acc', abs_acc, epoch_1000x)
-            log_writer.add_scalar('train_relative_acc', rel_acc, epoch_1000x)
+            log_writer.add_scalar('train_absolute_acc', mae_acc, epoch_1000x)
+            log_writer.add_scalar('train_relative_acc', mape_acc, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
 
     # gather the stats from all processes
@@ -99,15 +99,15 @@ def log_rmse(preds, lables):
 
 
 def acc_metric(preds, lables):
-    abs_acc = torch.mean(torch.abs(preds - lables))
-    rel_acc = 1 - torch.mean(torch.abs(preds - lables) / lables)
-    return abs_acc, rel_acc
+    mae_acc = torch.mean(torch.abs(lables - preds))
+    mape_acc = 1 - torch.mean(torch.abs(lables - preds) / lables)
+    return mae_acc, mape_acc
 
 
 def evaluate(model, dataloader, device, args):
     model.eval()
-    abs_accs = []
-    rel_accs = []
+    mae_accs = []
+    mape_accs = []
     with torch.no_grad():
         for data_iter_step, (samples_masked, target) in enumerate(dataloader):
             samples_masked = samples_masked.to(device, non_blocking=True)
@@ -115,11 +115,11 @@ def evaluate(model, dataloader, device, args):
             target = target.to(device, non_blocking=True)
 
             loss, weight_pred = model(samples_masked)
-            abs_acc, rel_acc = acc_metric(weight_pred, target)
-            abs_accs.append(abs_acc.item())
-            rel_accs.append(rel_acc.item())
+            mae_acc, mape_acc = acc_metric(weight_pred, target)
+            mae_accs.append(mae_acc.item())
+            mape_accs.append(mape_acc.item())
 
-    abs_acc = sum(abs_accs) / len(abs_accs)
-    rel_acc = sum(rel_accs) / len(rel_accs)
+    mae_acc = sum(mae_accs) / len(mae_accs)
+    mape_acc = sum(mape_accs) / len(mape_accs)
 
-    return abs_acc, rel_acc
+    return mae_acc, mape_acc
