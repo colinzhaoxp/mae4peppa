@@ -36,7 +36,7 @@ import models_mae
 from engine_pretrain import train_one_epoch, evaluate
 from util.peppa import build_peppa_dataset
 from util.iotools import save_train_configs
-from util.logging import Logger
+from util.mylogging import Logger
 
 
 def get_args_parser():
