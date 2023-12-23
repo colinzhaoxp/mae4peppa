@@ -28,9 +28,12 @@ def build_dataset(is_train, args):
     return dataset
 
 
-def build_transform(is_train, args):
+def build_transform(is_train, use_depth, args):
     mean = IMAGENET_DEFAULT_MEAN
     std = IMAGENET_DEFAULT_STD
+    if use_depth is not None:
+        mean = mean + (use_depth[0],)
+        std = std + (use_depth[1], )
     # train transform
     if is_train:
         # this should always dispatch to transforms_imagenet_train

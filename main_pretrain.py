@@ -34,9 +34,9 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 import models_mae
 
 from engine_pretrain import train_one_epoch, evaluate
-from util.peppa import build_peppa_dataset
+from util.create_dataset import create_dataset
 from util.iotools import save_train_configs
-from util.logging import Logger
+from util.mylogging import Logger
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
@@ -76,8 +76,10 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
+    parser.add_argument('--data_name', default='peppa', type=str, help='dataset name')
+    parser.add_argument('--data_path', default='./data/peppa', type=str,
                         help='dataset path')
+    parser.add_argument('--in_chans', default=3, type=int, help='input channels')
 
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
@@ -126,14 +128,25 @@ def main(args):
 
     cudnn.benchmark = True
 
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+    if args.data_name == 'peppa2depth':
+        depth_norm = (0.005261, 0.011198)
+        mean.append(depth_norm[0])
+        std.append(depth_norm[1])
+        args.in_chans = 4
+
     # simple augmentation
     transform_train = transforms.Compose([
             transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+            transforms.Normalize(mean=mean, std=std)])
 
-    dataset_train, dataset_val, dataset_test = build_peppa_dataset(args, transform_train)
+    dataset_train, dataset_val, dataset_test = create_dataset(args.data_name, args, transform_train)
+
+    if dataset_test is None:
+        dataset_test = dataset_val
 
     print(dataset_train)
 
@@ -176,7 +189,7 @@ def main(args):
     )
     
     # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, in_chans=args.in_chans)
 
     # load pre-trained model
     if args.finetune:
