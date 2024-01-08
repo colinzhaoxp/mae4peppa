@@ -245,7 +245,7 @@ def main(args):
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.perf_counter()
-    val_best_mae_acc = 0.0
+    val_best_mae_acc = 100000
     val_best_mae_epoch = 0
     val_best_mape_acc = 0.0
     val_best_mape_epoch = 0
@@ -258,13 +258,16 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        print(f"Epoch {epoch+1} finished: start evaluating on validation dataset:")
-        val_mae_acc, val_mape_acc = evaluate(model, data_loader_val, device, args)
+        # print(f"Epoch {epoch+1} finished: start evaluating on validation dataset:")
+        # val_mae_acc, val_mape_acc = evaluate(model, data_loader_val, device, args)
+        # print(f'Evaluate validation: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}')
 
-        print(f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}')
+        print(f"Epoch {epoch+1} finished: start evaluating on test dataset:")
+        val_mae_acc, val_mape_acc = evaluate(model, data_loader_test, device, args)
+        print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (val_mae_acc, val_mape_acc))
 
         if args.output_dir:
-            if val_mae_acc > val_best_mae_acc:
+            if val_mae_acc < val_best_mae_acc:
                 val_best_mae_acc = val_mae_acc
                 val_best_mae_epoch = epoch + 1
                 misc.save_model(
