@@ -36,21 +36,20 @@ def train_one_epoch(model: torch.nn.Module,
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
-    for data_iter_step, (samples_masked, samples, target) in enumerate(
+    for data_iter_step, (samples, target) in enumerate(
             metric_logger.log_every(data_loader, print_freq, header)):
 
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
-        samples_masked = samples_masked.to(device, non_blocking=True)
         samples = samples.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            loss, weight_pred = model(samples_masked, samples)
+            weight_pred = model(samples)
             weight_loss = log_rmse(weight_pred, target)
-            loss = loss + weight_loss
+            loss = weight_loss
 
             mae_acc, mape_acc = acc_metric(weight_pred, target)
 
@@ -92,6 +91,10 @@ def train_one_epoch(model: torch.nn.Module,
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+def loss_mse(preds, labels):
+    loss = torch.mean((preds - labels) ** 2)
+    return loss
+
 def log_rmse(preds, lables):
     clipped_preds = torch.clamp(preds, 1, float('inf'))
     rmse = torch.mean((torch.log(clipped_preds) - torch.log(lables)) ** 2)
@@ -114,7 +117,7 @@ def evaluate(model, dataloader, device, args):
             # samples = samples.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
 
-            loss, weight_pred = model(samples_masked)
+            weight_pred = model(samples_masked)
             mae_acc, mape_acc = acc_metric(weight_pred, target)
             mae_accs.append(mae_acc.item())
             mape_accs.append(mape_acc.item())

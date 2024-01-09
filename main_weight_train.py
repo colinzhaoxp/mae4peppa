@@ -129,7 +129,7 @@ def load_checkpoint(model, finetune_path):
     return model
 
 def main(args):
-    misc.init_distributed_mode(args)
+    args.distributed = False
 
     sys.stdout = Logger(os.path.join(args.output_dir, 'log.txt'))
     print("==========\nArgs:{}\n==========".format(args))
@@ -148,7 +148,7 @@ def main(args):
 
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
-    if args.data_name == 'peppa2depth':
+    if 'depth' in args.data_name:
         depth_norm = (0.005261, 0.011198)
         mean.append(depth_norm[0])
         std.append(depth_norm[1])
@@ -166,20 +166,9 @@ def main(args):
     if dataset_test is None:
         dataset_test = dataset_val
 
-    print(dataset_train)
+    sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
-    if args.distributed:
-        num_tasks = misc.get_world_size()
-        global_rank = misc.get_rank()
-        sampler_train = torch.utils.data.DistributedSampler(
-            dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
-        )
-        print("Sampler_train = %s" % str(sampler_train))
-    else:
-        global_rank = 0
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-
-    if global_rank == 0 and args.log_dir is not None:
+    if args.log_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
         log_writer = SummaryWriter(log_dir=args.output_dir)
     else:
@@ -190,7 +179,7 @@ def main(args):
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
-        drop_last=True,
+        drop_last=False,
     )
 
     data_loader_val = torch.utils.data.DataLoader(
@@ -229,9 +218,6 @@ def main(args):
     print("accumulate grad iterations: %d" % args.accum_iter)
     print("effective batch size: %d" % eff_batch_size)
 
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
-        model_without_ddp = model.module
     
     # following timm: set wd as 0 for bias and norm layers
     param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
@@ -249,22 +235,19 @@ def main(args):
     val_best_mae_epoch = 0
     val_best_mape_acc = 0.0
     val_best_mape_epoch = 0
+
     for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            data_loader_train.sampler.set_epoch(epoch)
+
         train_stats = train_one_epoch(
             model, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
             args=args
         )
-        # print(f"Epoch {epoch+1} finished: start evaluating on validation dataset:")
-        # val_mae_acc, val_mape_acc = evaluate(model, data_loader_val, device, args)
-        # print(f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}')
 
-        print(f"Epoch {epoch+1} finished: start evaluating on test dataset:")
-        val_mae_acc, val_mape_acc = evaluate(model, data_loader_test, device, args)
-        print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (val_mae_acc, val_mape_acc))
+        print(f"Epoch {epoch+1} finished: start evaluating on validation dataset:")
+        val_mae_acc, val_mape_acc = evaluate(model, data_loader_val, device, args)
+        print(f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}')
 
         if args.output_dir:
             if val_mae_acc < val_best_mae_acc:

@@ -109,7 +109,7 @@ class PreProcessor2depth(Dataset):
 
 def build_peppa2depth_dataset(args, transform=None):
     use_depth = None
-    if 'depth' in args.data_name:
+    if args.in_chans == 4:
         use_depth = (0.005261, 0.011198)
 
     if transform is None:
