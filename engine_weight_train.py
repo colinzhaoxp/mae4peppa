@@ -103,7 +103,7 @@ def log_rmse(preds, lables):
 
 def acc_metric(preds, lables):
     mae_acc = torch.mean(torch.abs(lables - preds))
-    mape_acc = 1 - torch.mean(torch.abs(lables - preds) / lables)
+    mape_acc = torch.mean(torch.abs(lables - preds) / lables)
     return mae_acc, mape_acc
 
 
