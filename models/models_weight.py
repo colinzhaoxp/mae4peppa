@@ -46,9 +46,11 @@ class EncoderViT2weight(nn.Module):
         # --------------------------------------------------------------------------
         # predict weight
         self.weight_pred = nn.Sequential(
-            nn.Linear(embed_dim, 128, bias=True),
+            nn.Linear(embed_dim, 128, bias=False),
             nn.ReLU(),
-            nn.Linear(128, 1, bias=False)
+            nn.Linear(128, 32, bias=False),
+            nn.ReLU(),
+            nn.Linear(32, 1, bias=False)
         )
         # --------------------------------------------------------------------------
 

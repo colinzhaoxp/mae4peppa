@@ -53,15 +53,9 @@ def build_transform(is_train, use_depth, args):
 
     # eval transform
     t = []
-    if args.input_size <= 224:
-        crop_pct = 224 / 256
-    else:
-        crop_pct = 1.0
-    size = int(args.input_size / crop_pct)
     t.append(
-        transforms.Resize(size, interpolation=PIL.Image.BICUBIC),  # to maintain same ratio w.r.t. 224 images
+        transforms.Resize(args.input_size, interpolation=PIL.Image.BICUBIC),  # to maintain same ratio w.r.t. 224 images
     )
-    t.append(transforms.CenterCrop(args.input_size))
 
     t.append(transforms.ToTensor())
     t.append(transforms.Normalize(mean, std))

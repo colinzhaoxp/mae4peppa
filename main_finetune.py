@@ -30,14 +30,13 @@ from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 
 import util.lr_decay as lrd
 import util.misc as misc
-from util.datasets import build_dataset
 from util.pos_embed import interpolate_pos_embed
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
-import models_vit
+from models import models_vit
 
-from engine_finetune import train_one_epoch, evaluate
-from util.peppa import build_peppa_dataset
+from engines.engine_finetune import train_one_epoch, evaluate
+from datasets.peppa import build_peppa_dataset
 
 
 def get_args_parser():

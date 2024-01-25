@@ -1,6 +1,5 @@
 import sys
 import os
-import requests
 
 import torch
 import numpy as np
@@ -9,7 +8,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 sys.path.append('..')
-import models_mae
+from models import models_mae
 
 # define the utils
 
@@ -21,7 +20,7 @@ def show_image(image, title=''):
     # image is [H, W, 3]
     assert image.shape[2] == 3
     plt.imshow(torch.clip((image * imagenet_std + imagenet_mean) * 255, 0, 255).int())
-    plt.title(title, fontsize=16)
+    # plt.title(title, fontsize=16)
     plt.axis('off')
 
 def run_one_image(img, model, save_dir=None):
@@ -36,18 +35,24 @@ def run_one_image(img, model, save_dir=None):
     y = model.unpatchify(y)
     y = torch.einsum('nchw->nhwc', y).detach().cpu()
 
-    x = torch.einsum('nchw->nhwc', x)
+    y = torch.clip((y[0] * imagenet_std + imagenet_mean) * 255, 0, 255)
+    im = Image.fromarray(y.numpy().astype(np.uint8))
+    im.save(save_dir)
+    # y = torch.einsum('hwc->chw', y)
+    # save_image(y, save_dir)
+
+    # x = torch.einsum('nchw->nhwc', x)
 
     # make the plt figure larger
-    plt.rcParams['figure.figsize'] = [24, 24]
+    # plt.rcParams['figure.figsize'] = [24, 24]
 
-    plt.subplot(1, 2, 1)
-    show_image(x[0], "original")
+    # plt.subplot(1, 2, 1)
+    # show_image(x[0], "original")
 
-    plt.subplot(1, 2, 2)
-    show_image(y[0], "reconstruction")
+    # plt.subplot(1, 2, 2)
+    # show_image(y[0], "reconstruction")
 
-    plt.savefig(save_dir)
+    # plt.savefig(save_dir)
 
 
 def load_img(img_url):
@@ -78,7 +83,8 @@ if __name__ == "__main__":
     model_path = "/home/zhaoxp/workspace/mae-test/output_dir/7/checkpoint-15.pth"
     models_mae = prepare_model(model_path)
 
-    img_dir = "/home/zhaoxp/workspace/mae-test/data/peppa/train/train_mask"
+    # img_dir = "/home/zhaoxp/workspace/mae-test/data/peppa/train/train_mask"
+    img_dir = './'
     img_save_dir = "/home/zhaoxp/workspace/mae-test/data/peppa/train/train_mask_recon"
     os.makedirs(img_save_dir, exist_ok=True)
 
@@ -86,6 +92,7 @@ if __name__ == "__main__":
 
     for root, _, fpaths in os.walk(img_dir):
         for fpath in fpaths:
+            if not fpath.endswith('jpg'): continue
             img_url = os.path.join(root, fpath)
             img = load_img(img_url)
             save_dir = os.path.join(img_save_dir, fpath)

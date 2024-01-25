@@ -10,7 +10,6 @@
 # --------------------------------------------------------
 import argparse
 import datetime
-import json
 import numpy as np
 import os
 import sys
@@ -21,7 +20,6 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
-import torchvision.datasets as datasets
 
 import timm
 
@@ -31,91 +29,23 @@ import timm.optim.optim_factory as optim_factory
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
-import models_weight
+from models import models_weight
 
-from engine_weight_train import train_one_epoch, evaluate
+from engines.engine_weight_train import train_one_epoch
+from engines.engine_test import evaluate
 from util.create_dataset import create_dataset
 from util.iotools import save_train_configs
 from util.mylogging import Logger
-
-def get_args_parser():
-    parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
-    parser.add_argument('--batch_size', default=64, type=int,
-                        help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    parser.add_argument('--epochs', default=400, type=int)
-    parser.add_argument('--accum_iter', default=1, type=int,
-                        help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
-
-    # Model parameters
-    parser.add_argument('--model', default='mae_vit_large_patch16', type=str, metavar='MODEL',
-                        help='Name of model to train')
-
-    parser.add_argument('--input_size', default=224, type=int,
-                        help='images input size')
-
-    parser.add_argument('--mask_ratio', default=0.75, type=float,
-                        help='Masking ratio (percentage of removed patches).')
-
-    parser.add_argument('--norm_pix_loss', action='store_true',
-                        help='Use (per-patch) normalized pixels as targets for computing loss')
-    parser.set_defaults(norm_pix_loss=False)
-    parser.add_argument('--finetune', default='', help='finetune from checkpoint')
-
-    # Optimizer parameters
-    parser.add_argument('--weight_decay', type=float, default=0.05,
-                        help='weight decay (default: 0.05)')
-
-    parser.add_argument('--lr', type=float, default=None, metavar='LR',
-                        help='learning rate (absolute lr)')
-    parser.add_argument('--blr', type=float, default=1e-3, metavar='LR',
-                        help='base learning rate: absolute_lr = base_lr * total_batch_size / 256')
-    parser.add_argument('--min_lr', type=float, default=0., metavar='LR',
-                        help='lower lr bound for cyclic schedulers that hit 0')
-
-    parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',
-                        help='epochs to warmup LR')
-
-    # Dataset parameters
-    parser.add_argument('--data_name', default='peppa', type=str, help='dataset name')
-    parser.add_argument('--data_path', default='./data/peppa', type=str,
-                        help='dataset path')
-    parser.add_argument('--in_chans', default=3, type=int, help='input channels')
-
-    parser.add_argument('--output_dir', default='./output_dir',
-                        help='path where to save, empty for no saving')
-    parser.add_argument('--log_dir', default='./output_dir',
-                        help='path where to tensorboard log')
-    parser.add_argument('--device', default='cuda',
-                        help='device to use for training / testing')
-    parser.add_argument('--seed', default=0, type=int)
-    parser.add_argument('--resume', default='',
-                        help='resume from checkpoint')
-
-    parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
-                        help='start epoch')
-    parser.add_argument('--num_workers', default=10, type=int)
-    parser.add_argument('--pin_mem', action='store_true',
-                        help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
-    parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
-    parser.set_defaults(pin_mem=True)
-
-    # distributed training parameters
-    parser.add_argument('--world_size', default=1, type=int,
-                        help='number of distributed processes')
-    parser.add_argument('--local_rank', default=-1, type=int)
-    parser.add_argument('--dist_on_itp', action='store_true')
-    parser.add_argument('--dist_url', default='env://',
-                        help='url used to set up distributed training')
-
-    return parser
-
+from util.options import get_args_parser
+from util.logger import setup_logger
+from util.my_utils import save_checkpoint
 
 
 def load_checkpoint(model, finetune_path):
     checkpoint = torch.load(finetune_path, map_location='cpu')
 
     print("Load pre-trained checkpoint from: %s" % finetune_path)
-    checkpoint_model = checkpoint['model']
+    checkpoint_model = checkpoint
     state_dict = model.state_dict()
     for k in ['head.weight', 'head.bias']:
         if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
@@ -128,51 +58,31 @@ def load_checkpoint(model, finetune_path):
 
     return model
 
-def main(args):
-    args.distributed = False
 
-    sys.stdout = Logger(os.path.join(args.output_dir, 'log.txt'))
-    print("==========\nArgs:{}\n==========".format(args))
-
-    print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
-    print("{}".format(args).replace(', ', ',\n'))
-
-    device = torch.device(args.device)
-
-    # fix the seed for reproducibility
-    seed = args.seed + misc.get_rank()
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
-    cudnn.benchmark = True
-
+def get_dataset(args):
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
-    if 'depth' in args.data_name:
+    if args.in_chans == 4:
         depth_norm = (0.005261, 0.011198)
         mean.append(depth_norm[0])
         std.append(depth_norm[1])
-        args.in_chans = 4
 
     # simple augmentation
     transform_train = transforms.Compose([
-            transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std)])
+        transforms.Resize(args.input_size, interpolation=3),  # 3 is bicubic
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(degrees=(0, 360)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std)])
 
     dataset_train, dataset_val, dataset_test = create_dataset(args.data_name, args, transform_train)
 
-    if dataset_test is None:
-        dataset_test = dataset_val
+    return dataset_train, dataset_val, dataset_test
 
+
+def get_dataloader(args, dataset_train, dataset_val, dataset_test):
     sampler_train = torch.utils.data.RandomSampler(dataset_train)
-
-    if args.log_dir is not None:
-        os.makedirs(args.output_dir, exist_ok=True)
-        log_writer = SummaryWriter(log_dir=args.output_dir)
-    else:
-        log_writer = None
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
@@ -194,7 +104,42 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=False,
     )
-    
+
+    return data_loader_train, data_loader_val, data_loader_test
+
+
+def main(args):
+
+    if args.log_dir is not None:
+        os.makedirs(args.output_dir, exist_ok=True)
+        log_writer = SummaryWriter(log_dir=args.output_dir)
+    else:
+        log_writer = None
+
+    logger = setup_logger('MAE', save_dir=args.output_dir, if_train=True)
+
+    sys.stdout = Logger(os.path.join(args.output_dir, 'log.txt'))
+    print("==========\nArgs:{}\n==========".format(args))
+
+    print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
+    print("{}".format(args).replace(', ', ',\n'))
+
+    device = torch.device(args.device)
+
+    # fix the seed for reproducibility
+    seed = args.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    cudnn.benchmark = True
+
+    dataset_train, dataset_val, dataset_test = get_dataset(args)
+
+    if dataset_test is None:
+        dataset_test = dataset_val
+
+    data_loader_train, data_loader_val, data_loader_test = get_dataloader(args, dataset_train, dataset_val, dataset_test)
+
     # define the model
     model = models_weight.__dict__[args.model](in_chans=args.in_chans)
 
@@ -204,80 +149,43 @@ def main(args):
 
     model.to(device)
 
-    model_without_ddp = model
-    # print("Model = %s" % str(model_without_ddp))
-
-    eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
-    
-    if args.lr is None:  # only base_lr is specified
-        args.lr = args.blr * eff_batch_size / 256
-
-    print("base lr: %.2e" % (args.lr * 256 / eff_batch_size))
-    print("actual lr: %.2e" % args.lr)
-
-    print("accumulate grad iterations: %d" % args.accum_iter)
-    print("effective batch size: %d" % eff_batch_size)
-
-    
     # following timm: set wd as 0 for bias and norm layers
-    param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+    param_groups = optim_factory.add_weight_decay(model, args.weight_decay)
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
-    print(optimizer)
-    loss_scaler = NativeScaler()
+    logger.info(optimizer)
+    lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=0, last_epoch=-1)
 
-    misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
-    criterion = torch.nn.MSELoss()
-
-    print(f"Start training for {args.epochs} epochs")
+    logger.info(f"Start training for {args.epochs} epochs")
     start_time = time.perf_counter()
-    val_best_mae_acc = 100000
+    val_best_mae_acc = float('inf')
     val_best_mae_epoch = 0
-    val_best_mape_acc = 0.0
-    val_best_mape_epoch = 0
 
-    for epoch in range(args.start_epoch, args.epochs):
+    for epoch in range(1, args.epochs+1):
 
-        train_stats = train_one_epoch(
-            model, data_loader_train,
-            optimizer, device, epoch, loss_scaler,
-            log_writer=log_writer,
-            args=args
-        )
+        train_one_epoch(model, data_loader_train, optimizer, device, epoch,
+                        log_writer=log_writer, args=args, logger=logger)
 
-        print(f"Epoch {epoch+1} finished: start evaluating on validation dataset:")
-        val_mae_acc, val_mape_acc = evaluate(model, data_loader_val, device, args)
-        print(f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}')
+        if epoch % args.evaluate_period == 0:
+            val_mae_acc, val_mape_acc = evaluate(model, data_loader_test, device, args)
+            info_str = f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}'
 
-        if args.output_dir:
             if val_mae_acc < val_best_mae_acc:
                 val_best_mae_acc = val_mae_acc
-                val_best_mae_epoch = epoch + 1
-                misc.save_model(
-                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, epoch=epoch, suffixes='best_MAE_ACC')
-            if val_mape_acc > val_best_mape_acc:
-                val_best_mape_acc = val_mape_acc
-                val_best_mape_epoch = epoch + 1
-                misc.save_model(
-                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, epoch=epoch, suffixes='best_MAPE_ACC')
+                val_best_mae_epoch = epoch
 
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                        'epoch': epoch, 'val_mae_acc': val_mae_acc, 'val_mape_acc': val_mape_acc,
-                        'val_best_mae_epoch': val_best_mae_epoch, 'val_best_mae_acc': val_best_mae_acc,
-                        'val_best_mape_epoch': val_best_mape_epoch, 'val_best_mape_acc': val_best_mape_acc}
+                save_checkpoint(model.state_dict(), args.output_dir + '/checkpoint-best_MAE_ACC.pth')
 
-        if args.output_dir and misc.is_main_process():
-            if log_writer is not None:
-                log_writer.flush()
-            print(log_stats)
+            log_stats = {'val_best_mae_epoch': val_best_mae_epoch, 'val_best_mae_acc': val_best_mae_acc,}
+
+            for k, v in log_stats.items():
+                info_str += f", {k}: {v:.4f} "
+
+            logger.info(info_str)
+
+        lr_sched.step()
 
     print("start evaluating on test dataset")
-
-    model = load_checkpoint(model, args.output_dir + '/checkpoint-best_MAPE_ACC.pth')
-    mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)
-    print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (mae_acc, mape_acc))
 
     model = load_checkpoint(model, args.output_dir + '/checkpoint-best_MAE_ACC.pth')
     mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)

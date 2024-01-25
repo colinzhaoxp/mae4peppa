@@ -1,37 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-# --------------------------------------------------------
-# References:
-# DeiT: https://github.com/facebookresearch/deit
-# BEiT: https://github.com/microsoft/unilm/tree/master/beit
-# --------------------------------------------------------
 import argparse
-import datetime
-import numpy as np
-import os
-import sys
-import time
-from pathlib import Path
-
-import torch
-import torch.backends.cudnn as cudnn
-from torch.utils.tensorboard import SummaryWriter
-
-import timm
-
-assert timm.__version__ == "0.3.2"  # version check
-
-import util.misc as misc
-
-from models import models_mae
-
-from engines.engine_pretrain import evaluate
-from datasets.peppa import build_peppa_dataset
-from util.iotools import save_train_configs
-from util.mylogging import Logger
 
 
 def get_args_parser():
@@ -39,7 +6,7 @@ def get_args_parser():
     parser.add_argument('--batch_size', default=64, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--epochs', default=400, type=int)
-    parser.add_argument('--accum_iter', default=1, type=int,
+    parser.add_argument('--accum_iter', default=10, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
@@ -72,8 +39,10 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
+    parser.add_argument('--data_name', default='peppa', type=str, help='dataset name')
+    parser.add_argument('--data_path', default='./data/peppa', type=str,
                         help='dataset path')
+    parser.add_argument('--in_chans', default=3, type=int, help='input channels')
 
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
@@ -101,73 +70,10 @@ def get_args_parser():
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
 
+    # train parameters
+    parser.add_argument('--loss-names', default='mse', help="which loss to use")
+    parser.add_argument('--meter-names', default='mae', help="which evaluate metric to use")
+    parser.add_argument('--log_period', default=10, type=int, help="log period")
+    parser.add_argument('--evaluate-period', default=2, type=int, help="evaluate period")
+
     return parser
-
-
-def main(args):
-    misc.init_distributed_mode(args)
-
-    sys.stdout = Logger(os.path.join(args.output_dir, 'log-test.txt'))
-    print("==========\nArgs:{}\n==========".format(args))
-
-    print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
-    print("{}".format(args).replace(', ', ',\n'))
-
-    device = torch.device(args.device)
-
-    # fix the seed for reproducibility
-    seed = args.seed + misc.get_rank()
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
-    cudnn.benchmark = True
-
-    dataset_train, dataset_val, dataset_test = build_peppa_dataset(args)
-
-    print(dataset_train)
-
-    data_loader_test = torch.utils.data.DataLoader(
-        dataset_test, batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=False,
-    )
-
-    # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
-
-    # load pre-trained model
-    if args.finetune:
-        checkpoint = torch.load(args.finetune, map_location='cpu')
-
-        print("Load pre-trained checkpoint from: %s" % args.finetune)
-        checkpoint_model = checkpoint['model']
-        state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
-        # load pre-trained model
-        msg = model.load_state_dict(checkpoint_model, strict=False)
-        print(msg)
-
-    model.to(device)
-
-    start_time = time.perf_counter()
-    print("start evaluating on test dataset")
-    abs_acc, rel_acc = evaluate(model, data_loader_test, device, args)
-    print("Evaluate: abs_acc = %.4f, rel_acc = %.4f" % (abs_acc, rel_acc))
-
-    total_time = time.perf_counter() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
-
-
-if __name__ == '__main__':
-    args = get_args_parser()
-    args = args.parse_args()
-    if args.output_dir:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    save_train_configs(args.output_dir, args)
-    main(args)

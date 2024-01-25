@@ -10,7 +10,6 @@
 # --------------------------------------------------------
 import argparse
 import datetime
-import json
 import numpy as np
 import os
 import sys
@@ -21,7 +20,6 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
-import torchvision.datasets as datasets
 
 import timm
 
@@ -31,9 +29,9 @@ import timm.optim.optim_factory as optim_factory
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
-import models_mae
+from models import models_mae
 
-from engine_pretrain import train_one_epoch, evaluate
+from engines.engine_pretrain import train_one_epoch, evaluate
 from util.create_dataset import create_dataset
 from util.iotools import save_train_configs
 from util.mylogging import Logger
