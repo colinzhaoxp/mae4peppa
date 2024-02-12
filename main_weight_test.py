@@ -38,7 +38,25 @@ from util.iotools import save_train_configs
 from util.mylogging import Logger
 from util.options import get_args_parser
 from util.logger import setup_logger
-from util.my_utils import save_checkpoint, load_checkpoint
+from util.my_utils import save_checkpoint
+
+
+def load_checkpoint(model, finetune_path):
+    checkpoint = torch.load(finetune_path, map_location='cpu')
+
+    print("Load pre-trained checkpoint from: %s" % finetune_path)
+    checkpoint_model = checkpoint
+    state_dict = model.state_dict()
+    for k in ['head.weight', 'head.bias']:
+        if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+            print(f"Removing key {k} from pretrained checkpoint")
+            del checkpoint_model[k]
+
+    # load pre-trained model
+    msg = model.load_state_dict(checkpoint_model, strict=False)
+    print(msg)
+
+    return model
 
 
 def get_dataset(args):
@@ -52,8 +70,11 @@ def get_dataset(args):
     # simple augmentation
     transform_train = transforms.Compose([
         transforms.Resize(args.input_size, interpolation=3),  # 3 is bicubic
-        transforms.RandomRotation(degrees=(0, 360)),
-        transforms.ToTensor()
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        # transforms.RandomRotation(degrees=(0, 360)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std)
     ])
 
     dataset_train, dataset_val, dataset_test = create_dataset(args.data_name, args, transform_train)
@@ -93,9 +114,9 @@ def main(args):
     else:
         log_writer = None
 
-    logger = setup_logger('MAE', save_dir=args.output_dir, if_train=True)
+    logger = setup_logger('MAE', save_dir=args.output_dir, if_train=False)
 
-    sys.stdout = Logger(os.path.join(args.output_dir, 'log.txt'))
+    sys.stdout = Logger(os.path.join(args.output_dir, 'log_test.txt'))
     print("==========\nArgs:{}\n==========".format(args))
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
@@ -120,65 +141,19 @@ def main(args):
     # define the model
     model = models.create(name=args.model, img_size=args.input_size, in_chans=args.in_chans, class_num=args.class_num,
                           patch_size=args.patch_size)
-
-    # load pre-trained model
-    if args.resume:
-        model = load_checkpoint(model, args.resume)
-
     model.to(device)
 
-    # following timm: set wd as 0 for bias and norm layers
-    # param_groups = optim_factory.add_weight_decay(model, args.weight_decay)
-    # optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.95))
-    logger.info(optimizer)
-    lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=0, last_epoch=-1)
-
-    logger.info(f"Start training for {args.epochs} epochs")
-    start_time = time.perf_counter()
-    val_best_mae_acc = float('inf')
-    val_best_mae_epoch = 0
-
-    for epoch in range(1, args.epochs+1):
-
-        train_one_epoch(model, data_loader_train, optimizer, device, epoch,
-                        log_writer=log_writer, args=args, logger=logger)
-
-        if epoch % args.evaluate_period == 0:
-            val_mae_acc, val_mape_acc = evaluate(model, data_loader_test, device, args)
-            # val_mape_acc = 0
-            # val_mae_acc = minist_evaluate(model, data_loader_test, device, args)
-            info_str = f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}'
-
-            if val_mae_acc < val_best_mae_acc:
-                val_best_mae_acc = val_mae_acc
-                val_best_mae_epoch = epoch
-
-                save_checkpoint(model.state_dict(), args.output_dir + '/checkpoint-best_MAE_ACC.pth')
-
-            log_stats = {'val_best_mae_epoch': val_best_mae_epoch, 'val_best_mae_acc': val_best_mae_acc,}
-
-            for k, v in log_stats.items():
-                info_str += f", {k}: {v:.4f} "
-
-            logger.info(info_str)
-
-        # lr_sched.step()
-
     print("start evaluating on test dataset")
-    model = load_checkpoint(model, args.output_dir + '/checkpoint-best_MAE_ACC.pth')
+    model = load_checkpoint(model, args.resume)
     mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)
     print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (mae_acc, mape_acc))
-
-    total_time = time.perf_counter() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
 
 
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
+    if args.resume:
+        args.output_dir = os.path.dirname(args.resume)
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    save_train_configs(args.output_dir, args)
     main(args)

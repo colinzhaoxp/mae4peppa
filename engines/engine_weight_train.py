@@ -27,8 +27,9 @@ def train_one_epoch(model: torch.nn.Module,
                     device: torch.device, epoch: int,
                     log_writer=None,
                     args=None,
-                    logger=None):
-    model.train(True)
+                    logger=None
+                    ):
+    model.train()
 
     meters = {
         'loss': AverageMeter()
@@ -36,15 +37,20 @@ def train_one_epoch(model: torch.nn.Module,
 
     accum_iter = args.accum_iter
 
-    for data_iter_step, (samples, target) in enumerate(data_loader):
+    for data_iter_step, (samples, depths, targets) in enumerate(data_loader):
+
+        # we use a per iteration (instead of per epoch) lr scheduler
+        # if data_iter_step % accum_iter == 0:
+        #     lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
         samples = samples.to(device)
-        target = target.to(device)
+        depths = depths.to(device)
+        targets = targets.to(device) / 100
 
-        weight_pred = model(samples)
+        weight_pred = model(samples, depths)
 
-        loss_ret = get_loss(weight_pred, target, args.loss_names)
-        meter_ret = get_meter(weight_pred, target, args.meter_names)
+        loss_ret = get_loss(weight_pred, targets, args.loss_names)
+        meter_ret = get_meter(weight_pred, targets, args.meter_names)
 
         total_loss = sum([v for k, v in loss_ret.items() if 'loss' in k])
 
@@ -62,7 +68,7 @@ def train_one_epoch(model: torch.nn.Module,
             meters[key].update(meter_ret[key])
 
         if (data_iter_step + 1) % args.log_period == 0:
-            info_str = f'Epoch[{epoch}] Iteration[{data_iter_step}/{len(data_loader)}]'
+            info_str = f'Epoch[{epoch}] Iteration[{data_iter_step+1}/{len(data_loader)}]'
             for k, v in meters.items():
                 info_str += f", {k}: {v.val:.4f}({v.avg:.4f})"
 
@@ -78,3 +84,8 @@ def train_one_epoch(model: torch.nn.Module,
             for k, v in meters.items():
                 log_writer.add_scalar(k, v.val, data_iter_step + epoch * len(data_loader))
 
+    #     break
+    # model.eval()
+    # with torch.no_grad():
+    #     weight_pred2 = model(samples)
+    #     print(weight_pred2)

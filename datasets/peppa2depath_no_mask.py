@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from util.datasets import build_transform
 
 
-class Peppa2depth():
+class Peppa2depth_no_Mask():
     def __init__(self, root):
         self.root = root
 
@@ -49,7 +49,6 @@ class Peppa2depth():
                 # 获得原始rgb图像路径
                 rgb_file_name = fpath.split('_')[0] + '.jpg'
                 origin_rgb_path = os.path.join(self.rgb_path, rgb_file_name)
-                mask_rgb_path = os.path.join(rgb_mask_dir, fpath)
 
                 try:
                     depth_file_name, weight, _ = labels[rgb_file_name].values()
@@ -58,9 +57,7 @@ class Peppa2depth():
                     continue
 
                 origin_depth_path = os.path.join(self.depth_path, depth_file_name)
-                num = fpath.split('.')[0].split('_')[-1]
-                mask_depth_path = os.path.join(depth_mask_dir, depth_file_name.split('.')[0]+'_'+num+'.png')
-                images.append((origin_rgb_path, mask_rgb_path, origin_depth_path, mask_depth_path, weight))
+                images.append((origin_rgb_path, origin_depth_path, weight))
 
         if len(miss_files) > 0:
             print(f"miss files in lable.txt: {len(miss_files)}")
@@ -69,9 +66,9 @@ class Peppa2depth():
         return images
 
 
-class PreProcessor2depth(Dataset):
+class PreProcessor2depth_no_mask(Dataset):
     def __init__(self, dataset, transform=None, eval_transform=None):
-        super(PreProcessor2depth, self).__init__()
+        super(PreProcessor2depth_no_mask, self).__init__()
         self.dataset = dataset
         self.transform = transform
         self.eval_transform = eval_transform
@@ -81,27 +78,19 @@ class PreProcessor2depth(Dataset):
         return PIL.Image.open(path).convert('RGB')
 
     def __getitem__(self, index):
-        origin_rgb_path, mask_rgb_path, origin_depth_path, mask_depth_path, weight = self.dataset[index]
+        origin_rgb_path, origin_depth_path, weight = self.dataset[index]
 
         rgb_img = self.loader(origin_rgb_path)
-        rgb_mask_img = self.loader(mask_rgb_path)
 
-        depth_img = self.loader(origin_depth_path).convert('L') # convert to gray image
-        depth_mask_img = self.loader(mask_depth_path).convert('L')
+        # depth_img = self.loader(origin_depth_path).convert('L') # convert to gray image
 
         # rgbd_img = PIL.Image.merge('RGBA', (*rgb_img.split(), depth_img))
-        # rgbd_mask_img = PIL.Image.merge('RGBA', (*rgb_mask_img.split(), depth_mask_img))
-        rgbd_mask_img = rgb_img
         rgbd_img = rgb_img
 
         if self.transform is not None:
-            rgbd_mask_img = self.transform(rgbd_mask_img)
-
-        if self.eval_transform is not None:
+            rgbd_img = self.transform(rgbd_img)
+        elif self.eval_transform is not None:
             rgbd_img = self.eval_transform(rgbd_img)
-        else:
-
-            return rgbd_mask_img, weight
 
         return rgbd_img, weight
 
@@ -109,7 +98,7 @@ class PreProcessor2depth(Dataset):
         return len(self.dataset)
 
 
-def build_peppa2depth_dataset(args, transform=None):
+def build_peppa2depth_no_mask_dataset(args, transform=None):
     use_depth = None
     if args.in_chans == 4:
         use_depth = (0.005261, 0.011198)
@@ -118,15 +107,23 @@ def build_peppa2depth_dataset(args, transform=None):
         transform = build_transform(False, use_depth, args)
     val_transform = build_transform(False, use_depth, args)
 
-    dataset = Peppa2depth(args.data_path)
+    dataset = Peppa2depth_no_Mask(args.data_path)
 
-    train_dataset = PreProcessor2depth(dataset.train_samples, transform=transform, eval_transform=val_transform)
-    val_dataset = PreProcessor2depth(dataset.val_samples, transform=val_transform)
+    total = len(dataset.train_samples) + len(dataset.val_samples)
+    train_num = int(total * 0.8)
+    val_num = int(total * 0.1)
+    test_num = total - train_num - val_num
 
-    return train_dataset, val_dataset, None
+    samples = dataset.train_samples + dataset.val_samples
+
+    train_dataset = PreProcessor2depth_no_mask(samples[:train_num], transform=transform)
+    val_dataset = PreProcessor2depth_no_mask(samples[train_num: train_num+val_num], eval_transform=val_transform)
+    test_dataset = PreProcessor2depth_no_mask(samples[train_num+val_num:], eval_transform=val_transform)
+
+    return train_dataset, val_dataset, test_dataset
 
 
 if __name__ == "__main__":
     root = "/home/zhaoxp/workspace/mae-test/data/peppa2depth"
-    dataset = Peppa2depth(root)
+    dataset = Peppa2depth_no_Mask(root)
     a = 1

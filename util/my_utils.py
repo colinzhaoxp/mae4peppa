@@ -50,3 +50,17 @@ def copy_state_dict(state_dict, model, strip=None):
         print("missing keys in state_dict:", missing)
 
     return model
+
+
+def load_checkpoint(model, finetune_path):
+    checkpoint = torch.load(finetune_path, map_location='cpu')
+
+    print("Load pre-trained checkpoint from: %s" % finetune_path)
+    if 'model' in checkpoint.keys():
+        checkpoint_model = checkpoint['model']
+    else:
+        checkpoint_model = checkpoint
+
+    model = copy_state_dict(checkpoint_model, model)
+
+    return model

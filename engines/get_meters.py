@@ -12,4 +12,7 @@ def get_meter(preds, labels, meter_names):
     if 'log_rmse' in meter_names:
         ret['log_rmse'] = compute_mae_acc(preds, labels)
 
+    if 'acc' in meter_names:
+        ret['acc'] = compute_acc(preds, labels)
+
     return ret

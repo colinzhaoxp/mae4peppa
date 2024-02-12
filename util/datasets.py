@@ -54,9 +54,9 @@ def build_transform(is_train, use_depth, args):
     # eval transform
     t = []
     t.append(
-        transforms.Resize(args.input_size, interpolation=PIL.Image.BICUBIC),  # to maintain same ratio w.r.t. 224 images
+        transforms.Resize(args.input_size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
     )
 
     t.append(transforms.ToTensor())
-    t.append(transforms.Normalize(mean, std))
+    # t.append(transforms.Normalize(mean, std))
     return transforms.Compose(t)

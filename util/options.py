@@ -15,6 +15,8 @@ def get_args_parser():
 
     parser.add_argument('--input_size', default=224, type=int,
                         help='images input size')
+    parser.add_argument('--patch_size', default=16, type=int,
+                        help='patch size')
 
     parser.add_argument('--mask_ratio', default=0.75, type=float,
                         help='Masking ratio (percentage of removed patches).')
@@ -22,7 +24,7 @@ def get_args_parser():
     parser.add_argument('--norm_pix_loss', action='store_true',
                         help='Use (per-patch) normalized pixels as targets for computing loss')
     parser.set_defaults(norm_pix_loss=False)
-    parser.add_argument('--finetune', default='', help='finetune from checkpoint')
+    parser.add_argument('--resume', default='', help='resume from checkpoint')
 
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.05,
@@ -50,9 +52,7 @@ def get_args_parser():
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
-    parser.add_argument('--seed', default=0, type=int)
-    parser.add_argument('--resume', default='',
-                        help='resume from checkpoint')
+    parser.add_argument('--seed', default=1024, type=int)
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
@@ -75,5 +75,6 @@ def get_args_parser():
     parser.add_argument('--meter-names', default='mae', help="which evaluate metric to use")
     parser.add_argument('--log_period', default=10, type=int, help="log period")
     parser.add_argument('--evaluate-period', default=2, type=int, help="evaluate period")
+    parser.add_argument('--class-num', default=1, type=int, help="class num")
 
     return parser

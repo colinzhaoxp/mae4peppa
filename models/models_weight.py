@@ -17,7 +17,8 @@ import torch.nn as nn
 from timm.models.vision_transformer import PatchEmbed, Block
 
 from util.pos_embed import get_2d_sincos_pos_embed
-
+from util.my_utils import load_checkpoint
+from .fusion import Fusion
 
 class EncoderViT2weight(nn.Module):
     """ Masked Autoencoder with VisionTransformer backbone
@@ -25,13 +26,18 @@ class EncoderViT2weight(nn.Module):
 
     def __init__(self, img_size=224, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
+                 mlp_ratio=4., norm_layer=nn.LayerNorm, class_num=1):
         super().__init__()
         self.in_chans = in_chans
         # --------------------------------------------------------------------------
         # MAE encoder specifics
         self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
         num_patches = self.patch_embed.num_patches
+
+        self.patch_embed_dep = PatchEmbed(img_size, patch_size, 1, embed_dim)
+        num_patches_dep = self.patch_embed_dep.num_patches
+
+        self.fusion = Fusion(embed_dim, heads=num_heads // 2)
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim),
@@ -46,12 +52,13 @@ class EncoderViT2weight(nn.Module):
         # --------------------------------------------------------------------------
         # predict weight
         self.weight_pred = nn.Sequential(
-            nn.Linear(embed_dim, 128, bias=False),
-            nn.ReLU(),
-            nn.Linear(128, 32, bias=False),
-            nn.ReLU(),
-            nn.Linear(32, 1, bias=False)
+            # nn.ReLU(),
+            nn.Linear(embed_dim, class_num, bias=False)
         )
+
+        # self.posture_pred = nn.Sequential(
+        #     nn.Linear(embed_dim, 3, bias=False)
+        # )
         # --------------------------------------------------------------------------
 
         self.initialize_weights()
@@ -115,24 +122,29 @@ class EncoderViT2weight(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], in_channels, h * p, h * p))
         return imgs
 
-    def forward_encoder(self, x):
+    def forward_encoder(self, x, x_dep):
         # embed patches
         x = self.patch_embed(x)
+        x_dep = self.patch_embed_dep(x_dep)
 
         # add pos embed w/o cls token
         x = x + self.pos_embed[:, 1:, :]
+        x_dep = x_dep + self.pos_embed[:, 1:, :]
+
+        # fusion rgb feats and depth feats
+        fusion_feats = self.fusion(x, x_dep)
 
         # append cls token
         cls_token = self.cls_token + self.pos_embed[:, :1, :]
         cls_tokens = cls_token.expand(x.shape[0], -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
+        fusion_feats = torch.cat((cls_tokens, fusion_feats), dim=1)
 
         # apply Transformer blocks
         for blk in self.blocks:
-            x = blk(x)
-        x = self.norm(x)
+            fusion_feats = blk(fusion_feats)
+        fusion_feats = self.norm(fusion_feats)
 
-        return x
+        return fusion_feats
 
     def forward_weight(self, x):
         # x: B * L * N
@@ -140,30 +152,42 @@ class EncoderViT2weight(nn.Module):
         weight_pred = self.weight_pred(x)
         return weight_pred
 
-    def forward(self, imgs_masked, imgs=None, mask_ratio=0.75):
-        latent = self.forward_encoder(imgs_masked)
+    def forward_posture(self, x):
+        x = x[:, 0, :]
+        posture_pred = self.posture_pred(x)
+        return posture_pred
+
+    def forward(self, imgs, img_dep=None, mask_ratio=0.75):
+        latent = self.forward_encoder(imgs, img_dep)
         weight_pred = self.forward_weight(latent)  # [N, L, p*p*3]
+        # pos_pred = self.forward_posture(latent)
         return weight_pred
 
 
-def mae_vit_base_patch16_dec512d8b(**kwargs):
+def mae_vit_base_patch16_dec512d8b(patch_size=16, **kwargs):
     model = EncoderViT2weight(
-        patch_size=16, embed_dim=768, depth=12, num_heads=12,
+        patch_size=patch_size, embed_dim=768, depth=12, num_heads=12,
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
 
-def mae_vit_large_patch16_dec512d8b(**kwargs):
+def mae_vit_large_patch16_dec512d8b(patch_size=16, **kwargs):
     model = EncoderViT2weight(
-        patch_size=16, embed_dim=1024, depth=24, num_heads=16,
+        patch_size=patch_size, embed_dim=1024, depth=24, num_heads=16,
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
 
-def mae_vit_huge_patch14_dec512d8b(**kwargs):
+def mae_vit_huge_patch14_dec512d8b(patch_size=14, **kwargs):
     model = EncoderViT2weight(
-        patch_size=14, embed_dim=1280, depth=32, num_heads=16,
+        patch_size=patch_size, embed_dim=1280, depth=32, num_heads=16,
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    return model
+
+
+def mae_weight_vit_tiny(patch_size=2, **kwargs):
+    model = EncoderViT2weight(
+        patch_size=patch_size, embed_dim=256, depth=4, num_heads=4, **kwargs)
     return model
 
 
