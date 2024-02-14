@@ -31,7 +31,7 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
 import models
 
-from engines.engine_weight_train import train_one_epoch
+from engines.engine_mae import train_one_epoch
 from engines.engine_test import evaluate, minist_evaluate
 from util.create_dataset import create_dataset
 from util.iotools import save_train_configs
@@ -125,7 +125,7 @@ def main(args):
     if args.resume:
         model = load_checkpoint(model, args.resume)
     else:
-        model = load_checkpoint(model, "/home/zhaoxp/workspace/mae-test/output_dir/mae_pretrain_vit_base.pth")
+        model = load_checkpoint(model, "/home/zhaoxp/workspace/mae-test/output_dir/mae_finetuned_vit_base.pth")
 
     model.to(device)
 
@@ -146,31 +146,7 @@ def main(args):
         train_one_epoch(model, data_loader_train, optimizer, device, epoch,
                         log_writer=log_writer, args=args, logger=logger)
 
-        if epoch % args.evaluate_period == 0:
-            val_mae_acc, val_mape_acc = evaluate(model, data_loader_test, device, args)
-            # val_mape_acc = 0
-            # val_mae_acc = minist_evaluate(model, data_loader_test, device, args)
-            info_str = f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}'
-
-            if val_mae_acc < val_best_mae_acc:
-                val_best_mae_acc = val_mae_acc
-                val_best_mae_epoch = epoch
-
-                save_checkpoint(model.state_dict(), args.output_dir + '/checkpoint-best_MAE_ACC.pth')
-
-            log_stats = {'val_best_mae_epoch': val_best_mae_epoch, 'val_best_mae_acc': val_best_mae_acc,}
-
-            for k, v in log_stats.items():
-                info_str += f", {k}: {v:.4f} "
-
-            logger.info(info_str)
-
-        # lr_sched.step()
-
-    print("start evaluating on test dataset")
-    model = load_checkpoint(model, args.output_dir + '/checkpoint-best_MAE_ACC.pth')
-    mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)
-    print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (mae_acc, mape_acc))
+        save_checkpoint(model.state_dict(), args.output_dir + '/checkpoint-best.pth')
 
     total_time = time.perf_counter() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

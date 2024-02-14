@@ -5,7 +5,6 @@ from .models_resnet import *
 from .vits import *
 from .convnext import *
 
-from util.my_utils import load_checkpoint
 
 __factory = {
     'mae_vit_base_patch16': mae_vit_base_patch16,
@@ -34,6 +33,4 @@ def create(name, *args, **kwargs):
     if name not in __factory:
         raise KeyError("Unknown model:", name)
     model = __factory[name](*args, **kwargs)
-    if not args.resume:
-        model = load_checkpoint(model, "/home/zhaoxp/workspace/mae-test/output_dir/mae_pretrain_vit_base.pth")
     return model
