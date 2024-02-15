@@ -1,4 +1,5 @@
 from .models_mae import *
+from .models_mae_weight import *
 from .models_vit import *
 from .models_weight import *
 from .models_resnet import *
@@ -10,12 +11,13 @@ __factory = {
     'mae_vit_base_patch16': mae_vit_base_patch16,
     'mae_vit_large_patch16': mae_vit_large_patch16,
     'mae_vit_huge_patch14': mae_vit_huge_patch14,
+    'mae_weight_vit_base_patch16': mae_weight_vit_base_patch16,
     'vit_base_patch16': vit_base_patch16,
     'vit_large_patch16': vit_large_patch16,
     'vit_huge_patch14': vit_huge_patch14,
-    'mae_weight_vit_base_patch16': mae_weight_vit_base_patch16,
-    'mae_weight_vit_large_patch16': mae_weight_vit_large_patch16,
-    'mae_weight_vit_huge_patch14': mae_weight_vit_huge_patch14,
+    'weight_vit_base_patch16': weight_vit_base_patch16,
+    'weight_vit_large_patch16': weight_vit_large_patch16,
+    'weight_vit_huge_patch14': weight_vit_huge_patch14,
     'mae_weight_vit_tiny': mae_weight_vit_tiny,
     'resnet18': resnet18,
     'resnet50': resnet50,
