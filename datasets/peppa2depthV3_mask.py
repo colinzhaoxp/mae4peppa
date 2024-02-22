@@ -98,9 +98,9 @@ class PreProcessor2depthV3_mask(Dataset):
             torch.set_rng_state(state)
             mask_depth_img = self.transform(mask_depth_img)
             torch.set_rng_state(state)
-            rgb_img = self.base_transform(rgb_img)
+            rgb_img = self.transform(rgb_img)
             # torch.set_rng_state(state)
-            # depth_img = self.base_transform(depth_img)
+            # depth_img = self.transform(depth_img)
 
             rgb_img = self.norm(rgb_img)
             # mask_depth_img = self.norm_depth(mask_depth_img)

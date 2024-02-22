@@ -67,7 +67,7 @@ class PreProcessor2depthV3(Dataset):
         self.loader = self.default_loader
 
         self.norm = transforms.Normalize(mean=mean, std=std)
-        self.norm_depth = transforms.Normalize(mean=0, std=0.1)
+        self.norm_depth = transforms.Normalize(mean=0, std=1)
 
     def default_loader(self, path):
         return PIL.Image.open(path)

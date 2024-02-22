@@ -6,8 +6,8 @@ mse_loss = nn.MSELoss()
 crossentropy_loss = nn.CrossEntropyLoss()
 
 def compute_mae(preds, labels):
-    # loss = torch.mean(torch.abs(preds - labels))
     preds = preds.reshape(-1)
+    # loss = torch.sum(torch.abs(preds - labels))
     loss = mae_loss(preds, labels)
     return loss
 

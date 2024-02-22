@@ -38,25 +38,7 @@ from util.iotools import save_train_configs
 from util.mylogging import Logger
 from util.options import get_args_parser
 from util.logger import setup_logger
-from util.my_utils import save_checkpoint
-
-
-def load_checkpoint(model, finetune_path):
-    checkpoint = torch.load(finetune_path, map_location='cpu')
-
-    print("Load pre-trained checkpoint from: %s" % finetune_path)
-    checkpoint_model = checkpoint
-    state_dict = model.state_dict()
-    for k in ['head.weight', 'head.bias']:
-        if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-            print(f"Removing key {k} from pretrained checkpoint")
-            del checkpoint_model[k]
-
-    # load pre-trained model
-    msg = model.load_state_dict(checkpoint_model, strict=False)
-    print(msg)
-
-    return model
+from util.my_utils import save_checkpoint, load_checkpoint, load_train_configs
 
 
 def get_dataset(args):
@@ -70,8 +52,6 @@ def get_dataset(args):
     # simple augmentation
     transform_train = transforms.Compose([
         transforms.Resize(args.input_size, interpolation=3),  # 3 is bicubic
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
         # transforms.RandomRotation(degrees=(0, 360)),
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std)
@@ -105,17 +85,21 @@ def get_dataloader(args, dataset_train, dataset_val, dataset_test):
 
     return data_loader_train, data_loader_val, data_loader_test
 
+
+def change_root_file_path(data, new_root_path):
+    for i in range(len(data)):
+        origin_rgb_path, origin_depth_path, weight, mask_rgb_path, mask_depth_path = data[i]
+        mask_rgb_path = os.path.join(new_root_path, os.path.basename(mask_rgb_path))
+        # mask_depth_path = os.path.join(new_root_path, os.path.basename(mask_depth_path))
+        data[i] = (origin_rgb_path, origin_depth_path, weight, mask_rgb_path, mask_depth_path)
+
+
 def main(args):
 
     if args.log_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
-        log_writer = SummaryWriter(log_dir=args.output_dir)
-    else:
-        log_writer = None
 
-    logger = setup_logger('MAE', save_dir=args.output_dir, if_train=False)
-
-    sys.stdout = Logger(os.path.join(args.output_dir, 'log_test.txt'))
+    sys.stdout = Logger(os.path.join(args.output_dir, 'log_test-V3-mask.txt'))
     print("==========\nArgs:{}\n==========".format(args))
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
@@ -135,6 +119,9 @@ def main(args):
     if dataset_test is None:
         dataset_test = dataset_val
 
+    if args.new_data_path:
+        change_root_file_path(dataset_test.dataset, args.new_data_path)
+
     data_loader_train, data_loader_val, data_loader_test = get_dataloader(args, dataset_train, dataset_val, dataset_test)
 
     # define the model
@@ -143,16 +130,23 @@ def main(args):
     model.to(device)
 
     print("start evaluating on test dataset")
-    model = load_checkpoint(model, args.resume)
+    model = load_checkpoint(model, os.path.join(args.output_dir, 'checkpoint-best_MAE_ACC.pth'))
     mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)
     print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (mae_acc, mape_acc))
 
 
 if __name__ == '__main__':
-    args = get_args_parser()
-    args = args.parse_args()
-    if args.resume:
-        args.output_dir = os.path.dirname(args.resume)
-    if args.output_dir:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    main(args)
+    parser = argparse.ArgumentParser(description="weight model test for V3 mask dataset")
+    parser.add_argument("--config_file", default='/home/zhaoxp/workspace/mae-test/output_dir/2-13/configs.yaml')
+    parser.add_argument('--data_name', default='peppa2depthV3', type=str, help='dataset name')
+    parser.add_argument('--data_path', default='./data/peppa2depthV3', type=str,
+                        help='dataset path')
+    parser.add_argument("--new_data_path", default="", type=str, help="new data path")
+    args = parser.parse_args()
+
+    config_args = load_train_configs(args.config_file)
+    config_args.data_name = args.data_name
+    config_args.data_path = args.data_path
+    config_args.new_data_path = args.new_data_path
+
+    main(config_args)

@@ -198,3 +198,4 @@ def mae_weight_vit_tiny(patch_size=2, **kwargs):
 weight_vit_base_patch16 = mae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 weight_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 weight_vit_huge_patch14 = mae_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blocks
+weight_vit_tiny = mae_weight_vit_tiny

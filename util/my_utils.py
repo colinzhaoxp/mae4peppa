@@ -5,6 +5,8 @@ import shutil
 
 import torch
 from torch.nn import Parameter
+import yaml
+from easydict import EasyDict as edict
 
 def mkdir_if_missing(dir_path):
     try:
@@ -64,3 +66,8 @@ def load_checkpoint(model, finetune_path):
     model = copy_state_dict(checkpoint_model, model)
 
     return model
+
+def load_train_configs(path):
+    with open(path, 'r') as f:
+        args = yaml.load(f, Loader=yaml.FullLoader)
+    return edict(args)

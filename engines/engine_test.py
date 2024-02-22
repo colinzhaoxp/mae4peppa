@@ -1,14 +1,16 @@
 import torch
 
 from util.metrics import *
+from tqdm import tqdm
 from .get_meters import get_meter
 
 def evaluate(model, dataloader, device, args):
     model.eval()
     mae_accs = []
     mape_accs = []
+    weight_preds = []
     with torch.no_grad():
-        for data_iter_step, (samples, depths, target) in enumerate(dataloader):
+        for data_iter_step, (samples, depths, target) in tqdm(enumerate(dataloader)):
             samples = samples.to(device)
             depths = depths.to(device)
             target = target.to(device) / 100
@@ -20,10 +22,15 @@ def evaluate(model, dataloader, device, args):
             mae_accs.append(mae_acc)
             mape_accs.append(mape_acc)
 
+            weight_preds.extend([i.item() for i in weight_pred])
+
+    print(f'max:{max(weight_preds):.4f}, min:{min(weight_preds):.4f}')
+
     mae_acc = sum(mae_accs) / len(mae_accs)
     mape_acc = sum(mape_accs) / len(mape_accs)
 
     return mae_acc, mape_acc
+
 
 def evaluate_mae_weight(model, dataloader, device, args):
     model.eval()

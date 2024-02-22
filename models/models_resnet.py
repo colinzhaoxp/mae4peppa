@@ -45,7 +45,7 @@ class ResNet(nn.Module):
         init.constant_(self.feat_bn.weight, 1)
         init.constant_(self.feat_bn.bias, 0)
 
-    def forward(self, x, depth):
+    def forward(self, x, depth=None):
         x = self.base(x)
         x = self.gap(x)
         x = x.view(x.size(0), -1)

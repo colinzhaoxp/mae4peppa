@@ -164,15 +164,15 @@ class MaskedAutoencoderViT(nn.Module):
     def forward_encoder(self, x):
         x, x_dep = x
         # embed patches
-        x = self.patch_embed(x)
-        x_dep = self.patch_embed_dep(x_dep)
+        fusion_feats = self.patch_embed(x)
+        # x_dep = self.patch_embed_dep(x_dep)
 
         # add pos embed w/o cls token
-        x = x + self.pos_embed[:, 1:, :]
-        x_dep = x_dep + self.pos_embed[:, 1:, :]
+        # x = x + self.pos_embed[:, 1:, :]
+        # x_dep = x_dep + self.pos_embed[:, 1:, :]
 
         # fusion rgb feats and depth feats
-        fusion_feats = self.fusion(x, x_dep)
+        # fusion_feats = self.fusion(x, x_dep)
 
         # append cls token
         cls_token = self.cls_token + self.pos_embed[:, :1, :]
@@ -225,11 +225,13 @@ class MaskedAutoencoderViT(nn.Module):
         loss = {'mse_loss': loss}
         return loss
 
-    def forward(self, imgs_masked, imgs):
+    def forward(self, imgs_masked, imgs=None):
         latent = self.forward_encoder(imgs_masked)
         pred = self.forward_decoder(latent)  # [N, L, p*p*3]
-        loss = self.forward_loss(imgs, pred)
-        return loss
+        if self.training:
+            loss = self.forward_loss(imgs, pred)
+            return loss
+        return pred
 
 
 def mae_vit_base_patch16_dec512d8b(patch_size=16, **kwargs):

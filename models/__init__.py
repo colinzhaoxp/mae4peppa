@@ -18,7 +18,7 @@ __factory = {
     'weight_vit_base_patch16': weight_vit_base_patch16,
     'weight_vit_large_patch16': weight_vit_large_patch16,
     'weight_vit_huge_patch14': weight_vit_huge_patch14,
-    'mae_weight_vit_tiny': mae_weight_vit_tiny,
+    'weight_vit_tiny': weight_vit_tiny,
     'resnet18': resnet18,
     'resnet50': resnet50,
     'resnet101': resnet101,

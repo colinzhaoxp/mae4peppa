@@ -80,12 +80,11 @@ def prepare_model(chkpt_dir, arch='mae_vit_base_patch16'):
 
 
 if __name__ == "__main__":
-    model_path = "/home/zhaoxp/workspace/mae-test/output_dir/7/checkpoint-15.pth"
+    model_path = "/home/zhaoxp/workspace/mae-test/output_dir/2-14/checkpoint-best.pth"
     models_mae = prepare_model(model_path)
 
-    # img_dir = "/home/zhaoxp/workspace/mae-test/data/peppa/train/train_mask"
-    img_dir = './'
-    img_save_dir = "/home/zhaoxp/workspace/mae-test/data/peppa/train/train_mask_recon"
+    img_dir = "/home/zhaoxp/workspace/mae-test/data/peppa2depthV3/rgb"
+    img_save_dir = "/home/zhaoxp/workspace/mae-test/output_dir/2-14/train_mask_recon"
     os.makedirs(img_save_dir, exist_ok=True)
 
     cnt = 10

@@ -77,4 +77,7 @@ def get_args_parser():
     parser.add_argument('--evaluate-period', default=2, type=int, help="evaluate period")
     parser.add_argument('--class-num', default=1, type=int, help="class num")
 
+    # load train config
+    parser.add_argument('--config-file', default=None, type=str, help='load config from a .yaml file')
+
     return parser
