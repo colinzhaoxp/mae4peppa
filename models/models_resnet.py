@@ -31,9 +31,27 @@ class ResNet(nn.Module):
             raise KeyError("Unsupported depth:", depth)
         resnet = ResNet.__factory[depth](pretrained=pretrained)
 
+        self.rgb_conv = nn.Sequential(
+            resnet.conv1, resnet.bn1, resnet.maxpool)
+
+        self.dep_conv = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        )
+        self.fusion_conv = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True)
+        )
+
+        nn.init.kaiming_normal_(self.dep_conv[0].weight, mode="fan_out", nonlinearity="relu")
+        nn.init.constant_(self.dep_conv[1].weight, 1)
+        nn.init.constant_(self.dep_conv[1].bias, 0)
+
         self.base = nn.Sequential(
-            resnet.conv1, resnet.bn1, resnet.maxpool, # no relu
             resnet.layer1, resnet.layer2, resnet.layer3, resnet.layer4)
+
         self.gap = nn.AdaptiveAvgPool2d(1)
 
         self.dim_feat = resnet.fc.in_features
@@ -45,7 +63,12 @@ class ResNet(nn.Module):
         init.constant_(self.feat_bn.weight, 1)
         init.constant_(self.feat_bn.bias, 0)
 
-    def forward(self, x, depth=None):
+    def forward(self, x, depth):
+        x = self.rgb_conv(x)
+        x_dep = self.dep_conv(depth)
+        x = x + x_dep
+        self.fusion_conv(x)
+
         x = self.base(x)
         x = self.gap(x)
         x = x.view(x.size(0), -1)
@@ -57,7 +80,6 @@ class ResNet(nn.Module):
         prob = self.classifier(bn_x)
 
         return prob
-
 
     def reset_params(self):
         for m in self.modules():

@@ -37,14 +37,15 @@ def train_one_epoch(model: torch.nn.Module,
 
     accum_iter = args.accum_iter
 
-    for data_iter_step, (samples, targets, mask_samples, mask_depths) in enumerate(data_loader):
+    for data_iter_step, (samples, depths, targets, mask_samples, mask_depths) in enumerate(data_loader):
 
         samples = samples.to(device)
+        depths = depths.to(device)
         mask_samples = mask_samples.to(device)
         mask_depths = mask_depths.to(device)
         targets = targets.to(device) / 100
 
-        loss_ret, weight_pred = model((mask_samples, mask_depths), samples)
+        loss_ret, weight_pred = model((mask_samples, mask_depths), (samples, depths))
 
         loss_ret.update(get_loss(weight_pred, targets, args.loss_names))
         meter_ret = get_meter(weight_pred, targets, args.meter_names)

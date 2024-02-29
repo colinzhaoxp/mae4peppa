@@ -77,8 +77,10 @@ class PreProcessor2depthV3_mask(Dataset):
         self.base_transform = base_transform
         self.loader = self.default_loader
 
+        self.ToTensor = transforms.ToTensor()
+
         self.norm = transforms.Normalize(mean=mean, std=std)
-        self.norm_depth = transforms.Normalize(mean=0, std=0.1)
+        self.norm_dep = transforms.Normalize(mean=mean[0], std=mean[0])
 
     def default_loader(self, path):
         return PIL.Image.open(path)
@@ -87,36 +89,38 @@ class PreProcessor2depthV3_mask(Dataset):
         origin_rgb_path, origin_depth_path, weight, mask_rgb_path, mask_depth_path = self.dataset[index]
 
         rgb_img = self.loader(origin_rgb_path).convert('RGB')
-        # depth_img = self.loader(origin_depth_path).convert('L') # convert to gray image
+        depth_img = self.loader(origin_depth_path).convert('L') # convert to gray image
 
         mask_rgb_img = self.loader(mask_rgb_path)
         mask_depth_img = self.loader(mask_depth_path).convert('L')
 
         if self.transform is not None:
             state = torch.get_rng_state()
-            mask_rgb_img = self.transform(mask_rgb_img)
-            torch.set_rng_state(state)
-            mask_depth_img = self.transform(mask_depth_img)
+
             torch.set_rng_state(state)
             rgb_img = self.transform(rgb_img)
-            # torch.set_rng_state(state)
-            # depth_img = self.transform(depth_img)
-
             rgb_img = self.norm(rgb_img)
-            # mask_depth_img = self.norm_depth(mask_depth_img)
-            mask_rgb_img = self.norm(mask_rgb_img)
-            mask_depth_img = self.norm_depth(mask_depth_img)
 
-            return rgb_img, weight, mask_rgb_img, mask_depth_img
+            torch.set_rng_state(state)
+            depth_img = self.transform(depth_img)
+            depth_img = depth_img * 255.0 / 50.0
+
+            torch.set_rng_state(state)
+            mask_rgb_img = self.transform(mask_rgb_img)
+            mask_rgb_img = self.norm(mask_rgb_img)
+
+            torch.set_rng_state(state)
+            mask_depth_img = self.transform(mask_depth_img)
+            mask_depth_img = mask_depth_img * 255.0 / 50.0
+
+            return rgb_img, depth_img, weight, mask_rgb_img, mask_depth_img
 
         if self.eval_transform is not None:
-            state = torch.get_rng_state()
             mask_rgb_img = self.eval_transform(mask_rgb_img)
-            torch.set_rng_state(state)
-            mask_depth_img = self.eval_transform(mask_depth_img)
-
             mask_rgb_img = self.norm(mask_rgb_img)
-            mask_depth_img = self.norm_depth(mask_depth_img)
+
+            mask_depth_img = self.eval_transform(mask_depth_img)
+            mask_depth_img = mask_depth_img * 255.0 / 1000.0
 
             return mask_rgb_img, mask_depth_img, weight
 

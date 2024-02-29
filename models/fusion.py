@@ -23,6 +23,12 @@ class Fusion(nn.Module):
 
         self.cross_attention_d2rgb = nn.MultiheadAttention(self.embed_dim, self.heads, batch_first=True)
 
+        self.fusion_conv = nn.Sequential(
+            nn.Conv1d(197, 197, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.LayerNorm(self.embed_dim),
+            nn.ReLU(inplace=True)
+        )
+
     def forward(self, rgb_features, dep_features):
         rgb_feats_norm = self.ln_norm_rgb(rgb_features)
         dep_feats_norm = self.ln_norm_dep(dep_features)
@@ -44,7 +50,8 @@ class Fusion(nn.Module):
             dep_feats_norm, rgb_feats_norm, rgb_feats_norm
         )[0]
 
-        fusion_feats = self.ln_norm(fusion_feats_rgb2d + fusion_feats_d2rgb)
+        fusion_feats = fusion_feats_rgb2d + fusion_feats_d2rgb
+        fusion_feats = self.fusion_conv(fusion_feats)
 
         return fusion_feats
 

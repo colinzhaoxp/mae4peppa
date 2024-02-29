@@ -167,7 +167,7 @@ def main(args):
 
     print("start evaluating on test dataset")
     model = load_checkpoint(model, args.output_dir + '/checkpoint-best_MAE_ACC.pth')
-    mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)
+    mae_acc, mape_acc = evaluate_mae_weight(model, data_loader_test, device, args)
     print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (mae_acc, mape_acc))
 
     total_time = time.perf_counter() - start_time

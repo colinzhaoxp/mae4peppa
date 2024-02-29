@@ -27,7 +27,6 @@ from tqdm import tqdm
 imagenet_mean = np.array([0.485, 0.456, 0.406])
 imagenet_std = np.array([0.229, 0.224, 0.225])
 
-
 def show_image(image, title=''):
     # image is [H, W, 3]
     assert image.shape[2] == 3
@@ -43,42 +42,34 @@ def before_forward(img, depth_img):
     x = x.unsqueeze(dim=0)
     x = torch.einsum('nhwc->nchw', x)
 
-    # d_x = torch.tensor(depth_img)
-    # d_x = d_x.unsqueeze(dim=0)
-    # d_x = torch.einsum('nhwc->nchw', d_x)
+    d_x = torch.tensor(depth_img)
+    d_x = d_x.unsqueeze(dim=0)
+    d_x = torch.einsum('nhwc->nchw', d_x)
 
-    # return x, d_x
-
-    return x, None
+    return x, d_x
 
 def run_one_image(img, model, save_dir=None):
     img, depth_img = img
+    save_dir, save_dir_dep = save_dir
 
     x, dep_x = before_forward(img, depth_img)
 
     # run MAE
-    y = model((x.float(), None))
+    y, y_dep = model((x.float(), dep_x.float()))
+
     y = model.unpatchify(y)
     y = torch.einsum('nchw->nhwc', y).detach().cpu()
 
     y = torch.clip((y[0] * imagenet_std + imagenet_mean) * 255, 0, 255)
     im = Image.fromarray(y.numpy().astype(np.uint8))
     im.save(save_dir)
-    # y = torch.einsum('hwc->chw', y)
-    # save_image(y, save_dir)
 
-    # x = torch.einsum('nchw->nhwc', x)
-
-    # make the plt figure larger
-    # plt.rcParams['figure.figsize'] = [24, 24]
-
-    # plt.subplot(1, 2, 1)
-    # show_image(x[0], "original")
-
-    # plt.subplot(1, 2, 2)
-    # show_image(y[0], "reconstruction")
-
-    # plt.savefig(save_dir)
+    y_dep = model.unpatchify_dep(y_dep)
+    y_dep = torch.einsum('nchw->nhwc', y_dep).detach().cpu()
+    y_dep = torch.clip(y_dep[0] * 50.0, 0, 255)
+    y_dep = y_dep.reshape((224, 224))
+    im = Image.fromarray(y_dep.numpy().astype(np.uint8))
+    im.save(save_dir_dep)
 
 
 def load_img(img_url, depth_img_url):
@@ -93,20 +84,17 @@ def load_img(img_url, depth_img_url):
     img = img - imagenet_mean
     img = img / imagenet_std
 
-    # # load an depth image
-    # depth_img = Image.open(depth_img_url)
-    # depth_img = depth_img.resize((224, 224))
-    # depth_img = np.array(depth_img) / 255.
-    # depth_img = np.expand_dims(depth_img, axis=-1)
-    #
-    # assert depth_img.shape == (224, 224, 1)
-    #
-    # # normalize by ImageNet mean and std
-    # depth_img = depth_img / 1.0
-    #
-    # return img, depth_img
+    # load an depth image
+    depth_img = Image.open(depth_img_url)
+    depth_img = depth_img.resize((224, 224))
+    depth_img = np.array(depth_img) / 50.0
+    depth_img = np.expand_dims(depth_img, axis=-1)
 
-    return img
+    assert depth_img.shape == (224, 224, 1)
+    # depth_img = depth_img - imagenet_mean[0]
+    # depth_img = depth_img / imagenet_std[0]
+
+    return img, depth_img
 
 
 def get_dataset(args):
@@ -161,22 +149,24 @@ def main(args):
     # model.to(device)
     model.eval()
 
-    img_save_dir = os.path.join(args.output_dir, "train_mask_recon")
+    img_save_dir = os.path.join(args.output_dir, "test_mask_recon")
     os.makedirs(img_save_dir, exist_ok=True)
+    img_save_dir_dep = os.path.join(args.output_dir, "test_mask_recon_dep")
+    os.makedirs(img_save_dir_dep, exist_ok=True)
 
     for (origin_rgb_path, origin_depth_path, weight, mask_rgb_path, mask_depth_path) in tqdm(dataset_test.dataset):
-        # img, depth_img = load_img(mask_rgb_path, mask_depth_path)
-        img = load_img(mask_rgb_path, mask_depth_path)
+        img, depth_img = load_img(mask_rgb_path, mask_depth_path)
+        # img = load_img(mask_rgb_path, mask_depth_path)
         save_dir = os.path.join(img_save_dir, os.path.basename(mask_rgb_path))
-        # run_one_image((img, depth_img), model, save_dir)
-        run_one_image((img, None), model, save_dir)
-
+        save_dir_dep = os.path.join(img_save_dir_dep, os.path.basename(mask_depth_path))
+        run_one_image((img, depth_img), model, (save_dir, save_dir_dep))
+        # run_one_image((img, None), model, save_dir)
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="weight model test for V3 mask dataset")
-    parser.add_argument("--config_file", default='/home/zhaoxp/workspace/mae-test/output_dir/2-14/configs.yaml')
+    parser.add_argument("--config_file", default='/home/zhaoxp/workspace/mae-test/output_dir/2-14-dep/configs.yaml')
     parser.add_argument('--data_name', default='peppa2depthV3', type=str, help='dataset name')
     parser.add_argument('--data_path', default='./data/peppa2depthV3', type=str,
                         help='dataset path')

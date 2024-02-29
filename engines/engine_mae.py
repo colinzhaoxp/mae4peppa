@@ -37,18 +37,15 @@ def train_one_epoch(model: torch.nn.Module,
 
     accum_iter = args.accum_iter
 
-    for data_iter_step, (samples, targets, mask_samples, mask_depths) in enumerate(data_loader):
-
-        # we use a per iteration (instead of per epoch) lr scheduler
-        # if data_iter_step % accum_iter == 0:
-        #     lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
+    for data_iter_step, (samples, depths, targets, mask_samples, mask_depths) in enumerate(data_loader):
 
         samples = samples.to(device)
         # targets = targets.to(device) / 100
+        depths = depths.to(device)
         mask_samples = mask_samples.to(device)
         mask_depths = mask_depths.to(device)
 
-        loss_ret = model((mask_samples, mask_depths), samples)
+        loss_ret = model((mask_samples, mask_depths), (samples, depths))
 
         total_loss = sum([v for k, v in loss_ret.items() if 'loss' in k])
 

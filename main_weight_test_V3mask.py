@@ -52,7 +52,7 @@ def get_dataset(args):
     # simple augmentation
     transform_train = transforms.Compose([
         transforms.Resize(args.input_size, interpolation=3),  # 3 is bicubic
-        # transforms.RandomRotation(degrees=(0, 360)),
+        transforms.RandomRotation(degrees=(0, 360)),
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std)
     ])
@@ -87,10 +87,12 @@ def get_dataloader(args, dataset_train, dataset_val, dataset_test):
 
 
 def change_root_file_path(data, new_root_path):
+    rgb_root_path = os.path.join(new_root_path, "test_mask_recon")
+    depth_root_path = os.path.join(new_root_path, "test_mask_recon_dep")
     for i in range(len(data)):
         origin_rgb_path, origin_depth_path, weight, mask_rgb_path, mask_depth_path = data[i]
-        mask_rgb_path = os.path.join(new_root_path, os.path.basename(mask_rgb_path))
-        # mask_depth_path = os.path.join(new_root_path, os.path.basename(mask_depth_path))
+        mask_rgb_path = os.path.join(rgb_root_path, os.path.basename(mask_rgb_path))
+        mask_depth_path = os.path.join(depth_root_path, os.path.basename(mask_depth_path))
         data[i] = (origin_rgb_path, origin_depth_path, weight, mask_rgb_path, mask_depth_path)
 
 

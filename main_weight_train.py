@@ -158,7 +158,7 @@ def main(args):
 
                 save_checkpoint(model.state_dict(), args.output_dir + '/checkpoint-best_MAE_ACC.pth')
 
-            log_stats = {'val_best_mae_epoch': val_best_mae_epoch, 'val_best_mae_acc': val_best_mae_acc,}
+            log_stats = {'val_best_mae_epoch': val_best_mae_epoch, 'val_best_mae_acc': val_best_mae_acc}
 
             for k, v in log_stats.items():
                 info_str += f", {k}: {v:.4f} "

@@ -52,8 +52,8 @@ def get_dataset(args):
     # simple augmentation
     transform_train = transforms.Compose([
         transforms.Resize(args.input_size, interpolation=3),  # 3 is bicubic
-        transforms.RandomRotation(degrees=(0, 360)),
-        transforms.ToTensor()
+        # transforms.RandomRotation(degrees=(0, 360)),
+        transforms.ToTensor() # ToTensor会默认将图片转换为[0,1]之间的数据
     ])
 
     dataset_train, dataset_val, dataset_test = create_dataset(args.data_name, args, transform_train)

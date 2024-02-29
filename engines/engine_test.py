@@ -42,7 +42,7 @@ def evaluate_mae_weight(model, dataloader, device, args):
             depths = depths.to(device)
             target = target.to(device) / 100
 
-            pred, weight_pred = model((samples, depths))
+            pred, pred_dep, weight_pred = model((samples, depths))
             mae_acc = compute_mae_acc(weight_pred, target)
             mape_acc = compute_mape_acc(weight_pred, target)
 

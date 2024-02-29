@@ -13,6 +13,7 @@ import PIL
 
 from torchvision import datasets, transforms
 
+import torchvision.transforms.functional as TF
 from timm.data import create_transform
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
@@ -56,7 +57,6 @@ def build_transform(is_train, use_depth, args):
     t.append(
         transforms.Resize(args.input_size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
     )
-
     t.append(transforms.ToTensor())
-    # t.append(transforms.Normalize(mean, std))
+
     return transforms.Compose(t)
