@@ -67,7 +67,7 @@ class ResNet(nn.Module):
         x = self.rgb_conv(x)
         x_dep = self.dep_conv(depth)
         x = x + x_dep
-        self.fusion_conv(x)
+        x = self.fusion_conv(x)
 
         x = self.base(x)
         x = self.gap(x)
