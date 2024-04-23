@@ -69,13 +69,13 @@ class Fusion(nn.Module):
             rgb_feats_norm, rgb_feats_norm, rgb_feats_norm
         )[0]
         rgb_feats_norm = self.add_norm_rgb(rgb_features, rgb_feats_norm)
-        rgb_feats_norm = self.add_norm_rgb(rgb_features_norm, self.ffn_rgb(rgb_feats_norm))
+        rgb_feats_norm = self.add_norm_rgb(rgb_feats_norm, self.ffn_rgb(rgb_feats_norm))
 
         dep_feats_norm = self.cross_attention_dep(
             dep_feats_norm, dep_feats_norm, dep_feats_norm
         )[0]
         dep_feats_norm = self.add_norm_dep(dep_features, dep_feats_norm)
-        dep_feats_norm = self.add_norm_dep(dep_features_norm, self.ffn_dep(dep_feats_norm))
+        dep_feats_norm = self.add_norm_dep(dep_feats_norm, self.ffn_dep(dep_feats_norm))
 
         # cross_attention
         fusion_feats_rgb2d = self.cross_attention_rgb2d(

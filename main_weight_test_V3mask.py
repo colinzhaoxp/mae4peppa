@@ -23,7 +23,7 @@ import torchvision.transforms as transforms
 
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
+# assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
 import util.misc as misc
@@ -32,7 +32,7 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 import models
 
 from engines.engine_weight_train import train_one_epoch
-from engines.engine_test import evaluate, minist_evaluate
+from engines.engine_test import evaluate_mae_weight
 from util.create_dataset import create_dataset
 from util.iotools import save_train_configs
 from util.mylogging import Logger
@@ -133,7 +133,7 @@ def main(args):
 
     print("start evaluating on test dataset")
     model = load_checkpoint(model, os.path.join(args.output_dir, 'checkpoint-best_MAE_ACC.pth'))
-    mae_acc, mape_acc = evaluate(model, data_loader_test, device, args)
+    mae_acc, mape_acc = evaluate_mae_weight(model, data_loader_test, device, args)
     print("Evaluate: mae_acc = %.4f, mape_acc = %.4f" % (mae_acc, mape_acc))
 
 
