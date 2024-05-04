@@ -23,9 +23,9 @@ class Peppa2depthV3_mask():
         self.labels_test = self.make_labels(self.labels_test_path)
 
         self.rgb_path = os.path.join(root, 'rgb')
-        self.depth_path = os.path.join(root, 'depth_rgb')
+        self.depth_path = os.path.join(root, 'depth')
         self.rgb_mask_path = os.path.join(root, 'rgb_mask')
-        self.depth_mask_path = os.path.join(root, 'depth_mask_rgb')
+        self.depth_mask_path = os.path.join(root, 'depth_mask')
 
         self.train_samples = self.make_dataset(self.rgb_path, self.depth_path, self.labels_train)
         self.val_samples = self.make_dataset(self.rgb_path, self.depth_path, self.labels_val)
@@ -50,11 +50,11 @@ class Peppa2depthV3_mask():
         for rgb_file_name, values in labels.items():
             origin_rgb_path = os.path.join(rgb_dir, rgb_file_name)
             depth_file_name, weight, _ = values.values()
-            origin_depth_path = os.path.join(depth_dir, depth_file_name.replace('.png', '.jpg'))
+            origin_depth_path = os.path.join(depth_dir, depth_file_name)
 
             for i in range(2):
                 mask_rgb_file_name = rgb_file_name.split('.')[0] + f'_{i}.jpg'
-                mask_depth_file_name = depth_file_name.split('.')[0] + f'_{i}.jpg'
+                mask_depth_file_name = depth_file_name.split('.')[0] + f'_{i}.png'
 
                 mask_rgb_path = os.path.join(self.rgb_mask_path, mask_rgb_file_name)
                 mask_depth_path = os.path.join(self.depth_mask_path, mask_depth_file_name)
@@ -89,10 +89,10 @@ class PreProcessor2depthV3_mask(Dataset):
         origin_rgb_path, origin_depth_path, weight, mask_rgb_path, mask_depth_path = self.dataset[index]
 
         rgb_img = self.loader(origin_rgb_path).convert('RGB')
-        depth_img = self.loader(origin_depth_path) # convert to gray image
+        depth_img = self.loader(origin_depth_path).convert('L') # convert to gray image
 
         mask_rgb_img = self.loader(mask_rgb_path)
-        mask_depth_img = self.loader(mask_depth_path)
+        mask_depth_img = self.loader(mask_depth_path).convert('L')
 
         if self.transform is not None:
             state = torch.get_rng_state()
@@ -103,7 +103,7 @@ class PreProcessor2depthV3_mask(Dataset):
 
             torch.set_rng_state(state)
             depth_img = self.transform(depth_img)
-            depth_img = self.norm(depth_img)
+            depth_img = depth_img * 255.0 / 50.0
 
             torch.set_rng_state(state)
             mask_rgb_img = self.transform(mask_rgb_img)
@@ -111,7 +111,7 @@ class PreProcessor2depthV3_mask(Dataset):
 
             torch.set_rng_state(state)
             mask_depth_img = self.transform(mask_depth_img)
-            mask_depth_img = self.norm(mask_depth_img)
+            mask_depth_img = mask_depth_img * 255.0 / 50.0
 
             return rgb_img, depth_img, weight, mask_rgb_img, mask_depth_img
 
@@ -120,7 +120,7 @@ class PreProcessor2depthV3_mask(Dataset):
             mask_rgb_img = self.norm(mask_rgb_img)
 
             mask_depth_img = self.eval_transform(mask_depth_img)
-            mask_depth_img = self.norm(mask_depth_img)
+            mask_depth_img = mask_depth_img * 255.0 / 1000.0
 
             return mask_rgb_img, mask_depth_img, weight
 

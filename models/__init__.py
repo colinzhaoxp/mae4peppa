@@ -5,7 +5,6 @@ from .models_weight import *
 from .models_resnet import *
 from .vits import *
 from .convnext import *
-from .models_mae_dep import *
 
 
 __factory = {
@@ -29,9 +28,6 @@ __factory = {
     'convnext_small': convnext_small,
     'convnext_base': convnext_base,
     'convnext_large': convnext_large,
-    'mae_dep': mae_depth_vit_base_patch16,
-    'mae_dep_large': mae_depth_vit_large_patch16,
-    'mae_dep_huge': mae_depth_vit_huge_patch14,
 }
 
 
