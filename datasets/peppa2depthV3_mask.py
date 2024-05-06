@@ -120,7 +120,7 @@ class PreProcessor2depthV3_mask(Dataset):
             mask_rgb_img = self.norm(mask_rgb_img)
 
             mask_depth_img = self.eval_transform(mask_depth_img)
-            mask_depth_img = mask_depth_img * 255.0 / 1000.0
+            mask_depth_img = mask_depth_img * 255.0 / 50.0
 
             return mask_rgb_img, mask_depth_img, weight
 

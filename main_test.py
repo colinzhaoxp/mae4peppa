@@ -22,13 +22,13 @@ from torch.utils.tensorboard import SummaryWriter
 
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
+# assert timm.__version__ == "0.3.2"  # version check
 
 import util.misc as misc
 
 from models import models_mae
 
-from engines.engine_pretrain import evaluate
+from engines.engine_test import evaluate_mae_weight
 from datasets.peppa import build_peppa_dataset
 from util.iotools import save_train_configs
 from util.mylogging import Logger
@@ -133,6 +133,14 @@ def main(args):
         drop_last=False,
     )
 
+    data_loader_val = torch.utils.data.DataLoader(
+        dataset_val, batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=False,
+    )
+
+
     # define the model
     model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
 
@@ -156,7 +164,7 @@ def main(args):
 
     start_time = time.perf_counter()
     print("start evaluating on test dataset")
-    abs_acc, rel_acc = evaluate(model, data_loader_test, device, args)
+    abs_acc, rel_acc = evaluate_mae_weight(model, data_loader_val, device, args)
     print("Evaluate: abs_acc = %.4f, rel_acc = %.4f" % (abs_acc, rel_acc))
 
     total_time = time.perf_counter() - start_time

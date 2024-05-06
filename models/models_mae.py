@@ -63,8 +63,18 @@ class MaskedAutoencoderViT(nn.Module):
             for i in range(decoder_depth)])
 
         self.decoder_norm = norm_layer(decoder_embed_dim)
-        self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size**2 * in_chans, bias=True) # decoder to patch
-        self.decoder_pred_dep = nn.Linear(decoder_embed_dim, patch_size**2, bias=True) # decoder to patch (depth)
+        self.decoder_pred = nn.Sequential(
+            nn.Linear(decoder_embed_dim, decoder_embed_dim, bias=True),
+            nn.LayerNorm(decoder_embed_dim),
+            nn.GELU(),
+            nn.Linear(decoder_embed_dim, patch_size ** 2 * 3, bias=True)  # decoder to patch
+        )
+        self.decoder_pred_dep = nn.Sequential(
+            nn.Linear(decoder_embed_dim, decoder_embed_dim, bias=True),
+            nn.LayerNorm(decoder_embed_dim),
+            nn.GELU(),
+            nn.Linear(decoder_embed_dim, patch_size ** 2, bias=True)  # decoder to patch (depth)
+        )
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss

@@ -29,7 +29,9 @@ class MaskedAutoencoderViT_Weight(MaskedAutoencoderViT):
 
         # --------------------------------------------------------------------------
         self.weight_pred = nn.Sequential(
-            nn.Linear(embed_dim, class_num, bias=False)
+            nn.LayerNorm(embed_dim),
+            nn.GELU(),
+            nn.Linear(embed_dim, class_num, bias=True)
         )
         # --------------------------------------------------------------------------
 

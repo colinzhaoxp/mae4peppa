@@ -36,6 +36,9 @@ def evaluate_mae_weight(model, dataloader, device, args):
     model.eval()
     mae_accs = []
     mape_accs = []
+    pred_mse, total_mse = 0, 0
+    mean_target = torch.tensor(91.22212648735243 / 100)
+
     with torch.no_grad():
         for data_iter_step, (samples, depths, target) in enumerate(dataloader):
             samples = samples.to(device)
@@ -43,16 +46,20 @@ def evaluate_mae_weight(model, dataloader, device, args):
             target = target.to(device) / 100
 
             pred, pred_dep, weight_pred = model((samples, depths))
+
             mae_acc = compute_mae_acc(weight_pred, target)
             mape_acc = compute_mape_acc(weight_pred, target)
+            pred_mse += compute_mse(weight_pred, target)
+            total_mse += compute_mse(target, mean_target)
 
             mae_accs.append(mae_acc)
             mape_accs.append(mape_acc)
 
     mae_acc = sum(mae_accs) / len(mae_accs)
     mape_acc = sum(mape_accs) / len(mape_accs)
+    r_acc = 1 - pred_mse / total_mse
 
-    return mae_acc, mape_acc
+    return mae_acc, mape_acc, r_acc
 
 
 def minist_evaluate(model, dataloader, device, args):

@@ -13,6 +13,12 @@ def compute_mse_acc(preds, labels):
     return mse_acc.item()
 
 
+def compute_mse(preds, labels):
+    preds = preds.reshape(-1)
+    mse = torch.sum((preds - labels) ** 2)
+    return mse.item()
+
+
 def compute_mape_acc(preds, labels):
     preds = preds.reshape(-1)
     mape_acc = torch.mean(torch.abs(preds - labels) / labels) * 100

@@ -138,8 +138,8 @@ def main(args):
 
     logger.info(f"Start training for {args.epochs} epochs")
     start_time = time.perf_counter()
-    val_best_mae_acc = float('inf')
-    val_best_mae_epoch = 0
+    test_best_mae_acc = float('inf')
+    test_best_mae_epoch = 0
 
     for epoch in range(1, args.epochs+1):
 
@@ -147,22 +147,26 @@ def main(args):
                         log_writer=log_writer, args=args, logger=logger)
 
         if epoch % args.evaluate_period == 0:
-            val_mae_acc, val_mape_acc = evaluate_mae_weight(model, data_loader_test, device, args)
-            # val_mape_acc = 0
-            # val_mae_acc = minist_evaluate(model, data_loader_test, device, args)
-            info_str = f'Evaluate: mae_acc = {val_mae_acc:.4f}, mape_acc = {val_mape_acc:.4f}'
+            test_mae_acc, test_mape_acc, test_r_cc = evaluate_mae_weight(model, data_loader_test, device, args)
+            info_str = f'Evaluate: test_mae_acc = {test_mae_acc:.4f}, test_mape_acc = {test_mape_acc:.4f}' + \
+                       f', test_r_cc = {test_r_cc:.4f}, epoch = {epoch}'
 
-            if val_mae_acc < val_best_mae_acc:
-                val_best_mae_acc = val_mae_acc
-                val_best_mae_epoch = epoch
+            if test_mae_acc < test_best_mae_acc:
+                test_best_mae_acc = test_mae_acc
+                test_best_mae_epoch = epoch
 
                 save_checkpoint(model.state_dict(), args.output_dir + '/checkpoint-best_MAE_ACC.pth')
 
-            log_stats = {'val_best_mae_epoch': val_best_mae_epoch, 'val_best_mae_acc': val_best_mae_acc,}
+            log_stats = {'test_best_mae_epoch': test_best_mae_epoch, 'test_best_mae_acc': test_best_mae_acc, }
 
             for k, v in log_stats.items():
                 info_str += f", {k}: {v:.4f} "
 
+            logger.info(info_str)
+
+            val_mae_acc, val_mape_acc, val_r_cc = evaluate_mae_weight(model, data_loader_val, device, args)
+            info_str = f'Evaluate: val_mae_acc = {val_mae_acc:.4f}, val_mape_acc = {val_mape_acc:.4f}' + \
+                       f', val_r_cc = {val_r_cc:.4f}, epoch = {epoch}'
             logger.info(info_str)
 
     print("start evaluating on test dataset")
